@@ -5,8 +5,10 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.accounts import router as accounts_router
 from app.api.categories import router as categories_router
+from app.api.fx_rates import router as fx_rates_router
 from app.api.health import router as health_router
 from app.api.me import router as me_router
+from app.api.reports import router as reports_router
 from app.api.transactions import router as transactions_router
 from app.core.auth import get_current_user
 from app.core.config import get_settings
@@ -41,3 +43,5 @@ app.include_router(me_router, prefix="/api/v1")
 app.include_router(accounts_router, prefix="/api/v1", dependencies=protected)
 app.include_router(categories_router, prefix="/api/v1", dependencies=protected)
 app.include_router(transactions_router, prefix="/api/v1", dependencies=protected)
+app.include_router(fx_rates_router, prefix="/api/v1", dependencies=protected)
+app.include_router(reports_router, prefix="/api/v1", dependencies=protected)
