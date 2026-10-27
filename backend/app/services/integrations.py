@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.crypto import decrypt_json, encrypt_json
@@ -31,7 +32,7 @@ IP_NOT_RESTRICTED = Notice(
 )
 KEY_NOT_READ_ONLY = Notice(
     "key_not_read_only",
-    "La clave tiene permisos distintos a lectura. Crea otra clave de solo lectura y vuelve a conectarla.",
+    "La clave tiene permisos distintos a lectura y se eliminó del servidor. Crea una clave nueva de solo lectura y conéctala de nuevo.",
 )
 
 # Failures of the exchange, as the API reports them. The message never includes anything from the request.
@@ -132,13 +133,20 @@ def connect_binance(db: Session, encryption_key: str, api_key: str, api_secret: 
     with binance.build_client(Credentials(api_key, api_secret)) as client:
         notices = check_key(client)
 
-    row = get_row(db, BINANCE)
-    if row is None:
-        row = models.Integration(provider=BINANCE)
-        db.add(row)
-    row.encrypted_secret = blob
-    row.status = "active"
-    row.warnings = [notice.as_json() for notice in notices]
+    values = {
+        "encrypted_secret": blob,
+        "status": "active",
+        "warnings": [notice.as_json() for notice in notices],
+    }
+    # One row per provider, even if two connections arrive at the same time.
+    statement = (
+        insert(models.Integration)
+        .values(provider=BINANCE, **values)
+        .on_conflict_do_update(index_elements=[models.Integration.provider], set_=values)
+        .returning(models.Integration)
+        .execution_options(populate_existing=True)
+    )
+    row = db.scalars(statement).one()
     db.commit()
     return row
 
@@ -155,7 +163,15 @@ def disconnect(db: Session, provider: str) -> None:
 
 
 def stored_credentials(row: models.Integration, encryption_key: str) -> Credentials:
-    if row.encrypted_secret is None or row.status == "disconnected":
+    if row.encrypted_secret is None:
+        if row.status == "error":
+            raise ApiError(
+                409,
+                "credentials_removed",
+                "La clave se eliminó porque tenía permisos distintos a lectura. Conecta una clave nueva de solo lectura.",
+            )
+        raise ApiError(409, "integration_not_connected", "Binance no está conectado. Conecta una clave de solo lectura primero.")
+    if row.status == "disconnected":
         raise ApiError(409, "integration_not_connected", "Binance no está conectado. Conecta una clave de solo lectura primero.")
     data = decrypt_json(encryption_key, row.encrypted_secret)
     api_key, api_secret = data.get("api_key"), data.get("api_secret")

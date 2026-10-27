@@ -219,6 +219,8 @@ class Integration(Base):
     __table_args__ = (
         CheckConstraint(in_list("provider", INTEGRATION_PROVIDERS), name="provider"),
         CheckConstraint(in_list("status", INTEGRATION_STATUSES), name="status"),
+        # One connection per provider.
+        Index("uq_integrations_provider", "provider", unique=True),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID_PK, primary_key=True, server_default=func.gen_random_uuid())

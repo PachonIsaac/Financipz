@@ -15,8 +15,11 @@ class BinanceConnect(Input):
     @field_validator("api_key", "api_secret")
     @classmethod
     def no_whitespace(cls, value: SecretStr) -> SecretStr:
-        if any(character.isspace() for character in value.get_secret_value()):
+        text = value.get_secret_value()
+        if any(character.isspace() for character in text):
             raise ValueError("must not contain spaces")
+        if not text.isascii():
+            raise ValueError("must only contain ASCII characters")
         return value
 
 

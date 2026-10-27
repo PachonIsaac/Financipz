@@ -3,6 +3,7 @@ import logging
 import httpx
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings, get_settings
 from app.db import models
@@ -135,6 +136,8 @@ def test_an_invalid_encryption_key_fails_closed(client, exchange):
         {"api_key": "has spaces in it", "api_secret": API_SECRET},
         {"api_key": API_KEY, "api_secret": API_SECRET, "extra": "x"},
         {"api_key": "x" * 300, "api_secret": API_SECRET},
+        {"api_key": "clave-ñandú-0001", "api_secret": API_SECRET},
+        {"api_key": API_KEY, "api_secret": "secreto-ñandú-0001"},
     ],
 )
 def test_invalid_bodies_are_rejected_without_echoing_secrets(client, exchange, body):
@@ -187,3 +190,24 @@ def test_disconnect_removes_the_credentials_and_is_idempotent(client, exchange, 
 
 def test_disconnecting_without_ever_connecting_is_fine(client, exchange):
     assert client.delete(URL).status_code == 204
+
+
+def test_the_database_allows_one_integration_row_per_provider(client, exchange, db):
+    connect(client)
+
+    db.add(models.Integration(provider="binance"))
+    with pytest.raises(IntegrityError):
+        db.flush()
+    db.rollback()
+
+
+def test_connecting_twice_keeps_one_row_and_the_latest_key(client, exchange, db):
+    connect(client)
+    first = bytes(stored(db).encrypted_secret)
+
+    connect(client, {"api_key": "another-key-0002", "api_secret": "another-secret-0002"})
+
+    db.expire_all()
+    rows = list(db.scalars(select(models.Integration)))
+    assert len(rows) == 1
+    assert bytes(rows[0].encrypted_secret) != first
