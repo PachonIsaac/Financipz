@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # of the two must be set, otherwise every protected route refuses to answer.
     allowed_user_ids: str = ""
     allowed_user_emails: str = ""
+    # Fernet key (urlsafe base64, 32 bytes) that encrypts third-party credentials stored in the database.
+    encryption_key: str = ""
 
     @property
     def origins(self) -> list[str]:
