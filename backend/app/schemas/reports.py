@@ -70,6 +70,8 @@ class CryptoOut(Output):
     # Null when there is no USD rate to convert it.
     value_cop: Cents | None = None
     snapshot_date: dt.date | None = None
+    # Assets in the snapshot that could not be priced and are not part of `value_usd`.
+    unpriced_assets: int = 0
 
 
 class WealthOut(Output):

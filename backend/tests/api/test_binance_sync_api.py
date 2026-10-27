@@ -205,6 +205,61 @@ def test_a_key_not_restricted_by_ip_adds_its_warning_to_every_sync(client, conne
     assert [warning["code"] for warning in body["warnings"]] == ["ip_not_restricted"]
 
 
+WALLET_PATHS = [
+    "/sapi/v1/asset/get-funding-asset",
+    "/sapi/v1/simple-earn/flexible/position",
+    "/sapi/v1/simple-earn/locked/position",
+]
+
+
+@pytest.mark.parametrize("wallet", WALLET_PATHS)
+@pytest.mark.parametrize(
+    "answer",
+    [
+        error(503, -1000),
+        error(500, -1001),
+        error(429, -1003),
+        error(400, -1021),
+        error(400, -1100),
+        lambda request: httpx.Response(200, text="oops"),
+        lambda request: httpx.Response(200, json={"rows": "x"}),
+        lambda request: httpx.Response(302, json=[], headers={"Location": "https://elsewhere.test/"}),
+    ],
+)
+def test_any_wallet_failure_that_is_not_a_permission_denial_aborts_and_writes_nothing(
+    client, connected, db, wallet, answer
+):
+    connected.overrides[wallet] = answer
+
+    response = sync(client)
+
+    assert response.status_code in (502, 503)
+    assert count(db, models.CryptoBalance) == 0
+    assert count(db, models.Account) == 0
+    assert integration(db).last_synced_at is None
+
+
+@pytest.mark.parametrize("wallet", WALLET_PATHS)
+def test_a_permission_denial_on_any_wallet_is_skipped_with_a_warning(client, connected, db, wallet):
+    connected.overrides[wallet] = error(401, -2015)
+
+    response = sync(client)
+
+    assert response.status_code == 200
+    assert len(response.json()["warnings"]) == 1
+    assert "skipped" in response.json()["warnings"][0]["code"]
+
+
+def test_a_wallet_that_rejects_the_signature_aborts_instead_of_being_skipped(client, connected, db):
+    connected.overrides["/sapi/v1/asset/get-funding-asset"] = error(400, -1022)
+
+    response = sync(client)
+
+    assert response.status_code == 422
+    assert count(db, models.CryptoBalance) == 0
+    assert integration(db).status == "error"
+
+
 def test_a_wallet_failure_that_is_not_about_permissions_aborts_and_writes_nothing(client, connected, db):
     connected.overrides["/sapi/v1/asset/get-funding-asset"] = error(503, -1000)
 
@@ -221,7 +276,7 @@ def test_a_wallet_failure_that_is_not_about_permissions_aborts_and_writes_nothin
     "flag", ["enableWithdrawals", "enableInternalTransfer", "permitsUniversalTransfer", "enableMargin",
              "enableFutures", "enableSpotAndMarginTrading", "enableVanillaOptions", "enablePortfolioMarginTrading"],
 )
-def test_a_key_that_gained_dangerous_permissions_is_refused_and_marked_as_error(client, connected, db, flag):
+def test_a_key_that_gained_dangerous_permissions_is_refused_deleted_and_marked_as_error(client, connected, db, flag):
     connected.restrictions = safe_restrictions(**{flag: True})
 
     response = sync(client)
@@ -230,17 +285,45 @@ def test_a_key_that_gained_dangerous_permissions_is_refused_and_marked_as_error(
     assert error_code(response) == "binance_key_not_read_only"
     row = integration(db)
     assert row.status == "error"
+    assert row.encrypted_secret is None
     assert [warning["code"] for warning in row.warnings] == ["key_not_read_only"]
+    assert "nueva" in row.warnings[0]["message"]
     assert connected.paths() == ["/sapi/v1/account/apiRestrictions"]
     assert count(db, models.CryptoBalance) == 0
     assert client.get(f"{API}/integrations").json()[1]["status"] == "error"
 
 
-def test_reconnecting_a_safe_key_recovers_from_the_error_status(client, connected, db):
+def test_after_the_key_is_deleted_syncing_is_refused_without_calling_the_exchange(client, connected, db):
+    connected.restrictions = safe_restrictions(enableWithdrawals=True)
+    sync(client)
+    connected.requests.clear()
+
+    response = sync(client)
+
+    assert response.status_code == 409
+    assert error_code(response) == "credentials_removed"
+    assert connected.requests == []
+    assert integration(db).status == "error"
+
+
+def test_the_job_refuses_to_run_without_a_stored_key(client, connected, db, monkeypatch, capsys):
+    connected.restrictions = safe_restrictions(enableWithdrawals=True)
+    sync(client)
+    connected.requests.clear()
+    run_job_on(db, connected, monkeypatch)
+
+    assert sync_binance.main() == 1
+    assert "credentials_removed" in capsys.readouterr().err
+    assert connected.requests == []
+
+
+def test_connecting_a_new_safe_key_recovers_from_the_error_status(client, connected, db):
     connected.restrictions = safe_restrictions(enableWithdrawals=True)
     sync(client)
     connected.restrictions = safe_restrictions()
+    body = {"api_key": "another-key-0002", "api_secret": "another-secret-0002"}
 
+    assert client.put(f"{API}/integrations/binance", json=body).status_code == 200
     assert sync(client).status_code == 200
     assert integration(db).status == "active"
 
@@ -534,3 +617,28 @@ def test_the_job_reports_failures_without_a_traceback(client, connected, db, mon
 
     assert sync_binance.main() == 1
     assert "binance_key_not_read_only" in capsys.readouterr().err
+
+
+def test_assets_with_unusable_names_are_skipped_with_a_warning_and_never_stored_or_requested(client, connected, db):
+    connected.spot = [balance("BTC", "1"), balance("ñandú", "5"), balance("btc", "1"), balance("A/B", "1")]
+
+    response = sync(client)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [warning["code"] for warning in body["warnings"]] == ["asset_skipped"]
+    assert body["assets"] == 1
+    assert set(balances(db)) == {"BTC"}
+    assert all("ñ" not in str(request.url) for request in connected.requests)
+    assert {params["symbol"] for params in connected.trade_requests()} <= {"BTCUSDT"}
+
+
+def test_earn_wrappers_in_spot_are_not_counted_twice_but_real_ld_tokens_are_kept(client, connected, db):
+    connected.prices.append({"symbol": "LDOUSDT", "price": "2.00"})
+    connected.spot = [balance("BTC", "0.5"), balance("LDBTC", "0.5"), balance("LDO", "10"), balance("LDUSDT", "7")]
+    connected.earn_flexible = [{"asset": "BTC", "totalAmount": "0.5"}]
+
+    response = sync(client)
+
+    assert response.status_code == 200
+    assert balances(db) == {"BTC": (D("1"), D("80000")), "LDO": (D("10"), D("20"))}

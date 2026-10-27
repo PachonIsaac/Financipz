@@ -1,14 +1,31 @@
 """An in-memory stand-in for the exchange, served through httpx's mock transport. Nothing touches the network."""
 
 from collections.abc import Callable
+from urllib.parse import parse_qsl
 
 import httpx
 
 from app.integrations import binance
-from app.integrations.binance import BinanceClient, Credentials
+from app.integrations.binance import BinanceClient, Credentials, sign
 
 API_KEY = "invented-key-0001"
 API_SECRET = "invented-secret-0001"
+
+
+# The only things the client may ever ask the exchange. A new endpoint in the client fails the tests until
+# it is added here on purpose, which is the moment to confirm it only reads.
+ALLOWED_ENDPOINTS = frozenset(
+    {
+        ("GET", "/sapi/v1/account/apiRestrictions"),
+        ("GET", "/api/v3/account"),
+        ("POST", "/sapi/v1/asset/get-funding-asset"),
+        ("GET", "/sapi/v1/simple-earn/flexible/position"),
+        ("GET", "/sapi/v1/simple-earn/locked/position"),
+        ("GET", "/api/v3/myTrades"),
+        ("GET", "/api/v3/ticker/price"),
+    }
+)
+PUBLIC_PATHS = frozenset({"/api/v3/ticker/price"})
 
 
 def safe_restrictions(**overrides) -> dict:
@@ -68,6 +85,9 @@ class FakeExchange:
         # Path -> handler that replaces the normal answer.
         self.overrides: dict[str, Callable[[httpx.Request], httpx.Response]] = {}
         self.requests: list[httpx.Request] = []
+        # Every (method, path) received, to compare with ALLOWED_ENDPOINTS.
+        self.seen: set[tuple[str, str]] = set()
+        self.credentials = Credentials()
         # The encryption key the application runs with in the tests.
         self.encryption_key = ""
 
@@ -77,8 +97,26 @@ class FakeExchange:
     def trade_requests(self) -> list[dict]:
         return [dict(request.url.params) for request in self.requests if request.url.path == "/api/v3/myTrades"]
 
+    def verify(self, request: httpx.Request) -> None:
+        """What the exchange itself would check: the key header, the signature, the method."""
+        path = request.url.path
+        assert (request.method, path) in ALLOWED_ENDPOINTS, f"unexpected request {request.method} {path}"
+        raw = request.url.query.decode()
+        if path in PUBLIC_PATHS:
+            assert "X-MBX-APIKEY" not in request.headers, "public request carries the key"
+            assert "signature" not in raw, "public request is signed"
+            return
+        assert request.headers.get("X-MBX-APIKEY") == self.credentials.api_key, "wrong or missing key header"
+        signed_part, separator, signature = raw.rpartition("&signature=")
+        assert separator, "signed request without a signature last"
+        assert signature == sign(self.credentials.api_secret, signed_part), "invalid signature"
+        params = dict(parse_qsl(signed_part))
+        assert params.get("timestamp", "").isdigit() and params.get("recvWindow") == "5000"
+
     def handle(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
+        self.seen.add((request.method, request.url.path))
+        self.verify(request)
         path = request.url.path
         if path in self.overrides:
             return self.overrides[path](request)
@@ -102,6 +140,7 @@ class FakeExchange:
         return httpx.Response(404, json={"code": -1, "msg": "unknown path"})
 
     def client(self, credentials: Credentials) -> BinanceClient:
+        self.credentials = credentials
         http = httpx.Client(
             base_url=binance.BASE_URL, transport=httpx.MockTransport(self.handle), follow_redirects=False
         )

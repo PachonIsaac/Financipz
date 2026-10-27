@@ -203,3 +203,23 @@ def test_a_cursor_with_a_naive_date_is_refused(client):
     response = client.get(f"{API}/crypto/trades", params={"cursor": cursor})
 
     assert error_code(response) == "invalid_cursor"
+
+
+def test_portfolio_converts_with_the_rate_of_the_snapshot_day_not_a_later_one(client, db, exchange_account):
+    snapshot(db, exchange_account, date(2026, 10, 22), {"USDT": ("10", "10.00")})
+    add_rate(db, date(2026, 10, 21), "4000")
+    add_rate(db, date(2026, 10, 25), "5000")
+
+    body = client.get(f"{API}/crypto/portfolio").json()
+
+    assert body["total_cop"] == "40000.00"
+    assert body["rate"]["date"] == "2026-10-21"
+
+
+def test_portfolio_without_a_rate_on_or_before_the_snapshot_has_no_pesos(client, db, exchange_account):
+    snapshot(db, exchange_account, date(2026, 10, 22), {"USDT": ("10", "10.00")})
+    add_rate(db, date(2026, 10, 25), "5000")
+
+    body = client.get(f"{API}/crypto/portfolio").json()
+
+    assert body["total_cop"] is None and body["rate"] is None

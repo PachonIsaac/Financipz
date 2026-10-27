@@ -14,7 +14,6 @@ from app.db import models
 from app.domain.crypto import summarize_values
 from app.domain.entities import LOCAL_TIMEZONE, Currency
 from app.domain.fx import round_money
-from app.domain.periods import local_today
 from app.schemas.crypto import HistoryPoint, PortfolioAsset, PortfolioOut
 from app.schemas.reports import CryptoOut, RateUsed
 from app.services.fx_rates import rate_on_or_before
@@ -43,7 +42,9 @@ def _in_cop(value: Decimal | None, rate: Decimal | None) -> Decimal | None:
 
 def portfolio(db: Session) -> PortfolioOut:
     day, assets = _latest_snapshot(db)
-    rate = rate_on_or_before(db, local_today())
+    # The snapshot is valued with the rate of its own day (or the closest earlier one), so it does not
+    # change as the exchange rate moves.
+    rate = rate_on_or_before(db, day) if day else None
     rate_value = rate.value if rate else None
     totals = summarize_values(value for _, value in assets.values())
 
@@ -63,13 +64,19 @@ def portfolio(db: Session) -> PortfolioOut:
     )
 
 
-def wealth_block(db: Session, rate: Decimal | None) -> CryptoOut:
-    """The `crypto` part of the wealth view, from the latest snapshot."""
+def wealth_block(db: Session) -> CryptoOut:
+    """The `crypto` part of the wealth view, from the latest snapshot and the rate of its day."""
     day, assets = _latest_snapshot(db)
     if day is None:
         return CryptoOut()
-    total = summarize_values(value for _, value in assets.values()).total_usd
-    return CryptoOut(value_usd=total, value_cop=_in_cop(total, rate), snapshot_date=day)
+    totals = summarize_values(value for _, value in assets.values())
+    rate = rate_on_or_before(db, day)
+    return CryptoOut(
+        value_usd=totals.total_usd,
+        value_cop=_in_cop(totals.total_usd, rate.value if rate else None),
+        snapshot_date=day,
+        unpriced_assets=totals.unpriced,
+    )
 
 
 def history(db: Session, start: date | None, end: date | None) -> list[HistoryPoint]:

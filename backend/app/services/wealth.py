@@ -80,6 +80,6 @@ def current_wealth(db: Session) -> WealthOut:
         receivable_loans=wealth.receivable_loans,
         loans=loans,
         accounts=accounts,
-        crypto=crypto_service.wealth_block(db, rate.value if rate else None),
+        crypto=crypto_service.wealth_block(db),
         rate=RateUsed(currency=Currency.USD, value=rate.value, date=rate.date) if rate else None,
     )

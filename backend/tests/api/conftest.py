@@ -17,7 +17,7 @@ from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.integrations import binance
 from app.main import app
-from tests.api.binance_fake import FakeExchange
+from tests.api.binance_fake import ALLOWED_ENDPOINTS, FakeExchange
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 TEST_DATABASE_NAME = "financipz_test"
@@ -98,11 +98,12 @@ ENCRYPTION_TEST_KEY = Fernet.generate_key().decode()
 
 
 @pytest.fixture
-def exchange(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> FakeExchange:
+def exchange(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Iterator[FakeExchange]:
     """A fake exchange behind the Binance client, an encryption key, and a fixed day."""
     fake = FakeExchange()
     fake.encryption_key = ENCRYPTION_TEST_KEY
     monkeypatch.setattr(binance, "build_client", fake.client)
     monkeypatch.setattr("app.services.binance_sync.local_today", lambda: date(2026, 10, 27))
     app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, encryption_key=ENCRYPTION_TEST_KEY)
-    return fake
+    yield fake
+    assert fake.seen <= ALLOWED_ENDPOINTS, f"requests outside the read-only list: {fake.seen - ALLOWED_ENDPOINTS}"

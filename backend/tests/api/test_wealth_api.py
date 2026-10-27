@@ -22,7 +22,7 @@ def test_empty_database(client):
     assert body["receivable_loans"] == "0.00"
     assert body["loans"] == []
     assert body["accounts"] == []
-    assert body["crypto"] == {"value_usd": None, "value_cop": None, "snapshot_date": None}
+    assert body["crypto"] == {"value_usd": None, "value_cop": None, "snapshot_date": None, "unpriced_assets": 0}
     assert body["rate"] is None
 
 
@@ -184,7 +184,9 @@ def test_crypto_block_comes_from_the_latest_snapshot_in_dollars_and_pesos(client
 
     body = wealth(client)
 
-    assert body["crypto"] == {"value_usd": "40010.00", "value_cop": "160060005.00", "snapshot_date": "2026-10-26"}
+    assert body["crypto"] == {
+        "value_usd": "40010.00", "value_cop": "160060005.00", "snapshot_date": "2026-10-26", "unpriced_assets": 1,
+    }
 
 
 def test_crypto_block_without_a_rate_has_dollars_only(client, db):
@@ -193,7 +195,7 @@ def test_crypto_block_without_a_rate_has_dollars_only(client, db):
 
     body = wealth(client)
 
-    assert body["crypto"] == {"value_usd": "10.00", "value_cop": None, "snapshot_date": "2026-10-26"}
+    assert body["crypto"] == {"value_usd": "10.00", "value_cop": None, "snapshot_date": "2026-10-26", "unpriced_assets": 0}
 
 
 def test_crypto_never_changes_the_savings_numbers(client, db):
@@ -208,3 +210,14 @@ def test_crypto_never_changes_the_savings_numbers(client, db):
     for field in ("available", "credit_card_debt", "real_money", "receivable_loans", "loans", "accounts"):
         assert after[field] == before[field]
     assert after["crypto"]["value_usd"] == "80000.00"
+
+
+def test_crypto_block_uses_the_rate_of_the_snapshot_day_not_todays(client, db):
+    add_rate(db, date(2026, 10, 20), "4000")
+    add_rate(db, date(2026, 10, 26), "5000")
+    exchange = create_account(client, name="Binance", type="exchange", currency="USD")
+    add_snapshot(db, exchange["id"], date(2026, 10, 22), {"USDT": ("10", "10.00")})
+
+    body = wealth(client)
+
+    assert body["crypto"]["value_cop"] == "40000.00"
