@@ -64,8 +64,12 @@ class LoanOut(Output):
 
 
 class CryptoOut(Output):
-    # Not available until the exchange integration exists.
+    """Latest crypto snapshot. All fields are null until the exchange has been synced."""
+
     value_usd: Cents | None = None
+    # Null when there is no USD rate to convert it.
+    value_cop: Cents | None = None
+    snapshot_date: dt.date | None = None
 
 
 class WealthOut(Output):

@@ -11,7 +11,8 @@ from app.domain.errors import DomainError
 from app.domain.fx import FxRates
 from app.domain.periods import local_today
 from app.domain.wealth import compute_wealth
-from app.schemas.reports import CryptoOut, LoanOut, RateUsed, WealthAccount, WealthOut
+from app.schemas.reports import LoanOut, RateUsed, WealthAccount, WealthOut
+from app.services import crypto as crypto_service
 from app.services.balances import account_balances, to_domain_account
 from app.services.fx_rates import rate_on_or_before
 
@@ -79,6 +80,6 @@ def current_wealth(db: Session) -> WealthOut:
         receivable_loans=wealth.receivable_loans,
         loans=loans,
         accounts=accounts,
-        crypto=CryptoOut(),
+        crypto=crypto_service.wealth_block(db, rate.value if rate else None),
         rate=RateUsed(currency=Currency.USD, value=rate.value, date=rate.date) if rate else None,
     )

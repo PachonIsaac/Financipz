@@ -7,6 +7,11 @@ class CategoryType(StrEnum):
     TRANSFER = "transfer"
 
 
+class TradeSide(StrEnum):
+    BUY = "buy"
+    SELL = "sell"
+
+
 class TransactionSource(StrEnum):
     MANUAL = "manual"
     GMAIL = "gmail"

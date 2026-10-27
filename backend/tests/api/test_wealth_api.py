@@ -22,7 +22,7 @@ def test_empty_database(client):
     assert body["receivable_loans"] == "0.00"
     assert body["loans"] == []
     assert body["accounts"] == []
-    assert body["crypto"] == {"value_usd": None}
+    assert body["crypto"] == {"value_usd": None, "value_cop": None, "snapshot_date": None}
     assert body["rate"] is None
 
 
@@ -163,3 +163,48 @@ def test_a_usd_exchange_account_needs_no_rate(client):
     row = next(item for item in body["accounts"] if item["id"] == exchange["id"])
     assert row["balance"] == "50.00"
     assert row["balance_cop"] is None
+
+
+def add_snapshot(db, account_id, day: date, assets: dict[str, tuple[str, str | None]]) -> None:
+    for asset, (quantity, value) in assets.items():
+        db.add(
+            models.CryptoBalance(
+                account_id=account_id, asset=asset, date=day, quantity=D(quantity),
+                value_usd=None if value is None else D(value),
+            )
+        )
+    db.commit()
+
+
+def test_crypto_block_comes_from_the_latest_snapshot_in_dollars_and_pesos(client, db):
+    add_rate(db, date(2026, 10, 20), "4000.5")
+    exchange = create_account(client, name="Binance", type="exchange", currency="USD")
+    add_snapshot(db, exchange["id"], date(2026, 10, 1), {"BTC": ("1", "999")})
+    add_snapshot(db, exchange["id"], date(2026, 10, 26), {"BTC": ("0.5", "40000.00"), "USDT": ("10", "10.00"), "OBSCURE": ("1", None)})
+
+    body = wealth(client)
+
+    assert body["crypto"] == {"value_usd": "40010.00", "value_cop": "160060005.00", "snapshot_date": "2026-10-26"}
+
+
+def test_crypto_block_without_a_rate_has_dollars_only(client, db):
+    exchange = create_account(client, name="Binance", type="exchange", currency="USD")
+    add_snapshot(db, exchange["id"], date(2026, 10, 26), {"USDT": ("10", "10.00")})
+
+    body = wealth(client)
+
+    assert body["crypto"] == {"value_usd": "10.00", "value_cop": None, "snapshot_date": "2026-10-26"}
+
+
+def test_crypto_never_changes_the_savings_numbers(client, db):
+    add_rate(db, date(2026, 10, 20), "4000")
+    create_account(client, name="Bank", type="bank", initial=100_000)
+    exchange = create_account(client, name="Binance", type="exchange", currency="USD")
+    before = wealth(client)
+
+    add_snapshot(db, exchange["id"], date(2026, 10, 26), {"BTC": ("1", "80000.00")})
+    after = wealth(client)
+
+    for field in ("available", "credit_card_debt", "real_money", "receivable_loans", "loans", "accounts"):
+        assert after[field] == before[field]
+    assert after["crypto"]["value_usd"] == "80000.00"
