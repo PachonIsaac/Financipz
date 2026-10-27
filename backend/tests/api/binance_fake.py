@@ -68,6 +68,8 @@ class FakeExchange:
         # Path -> handler that replaces the normal answer.
         self.overrides: dict[str, Callable[[httpx.Request], httpx.Response]] = {}
         self.requests: list[httpx.Request] = []
+        # The encryption key the application runs with in the tests.
+        self.encryption_key = ""
 
     def paths(self) -> list[str]:
         return [request.url.path for request in self.requests]

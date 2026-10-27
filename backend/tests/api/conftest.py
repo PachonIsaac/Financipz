@@ -101,6 +101,7 @@ ENCRYPTION_TEST_KEY = Fernet.generate_key().decode()
 def exchange(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> FakeExchange:
     """A fake exchange behind the Binance client, an encryption key, and a fixed day."""
     fake = FakeExchange()
+    fake.encryption_key = ENCRYPTION_TEST_KEY
     monkeypatch.setattr(binance, "build_client", fake.client)
     monkeypatch.setattr("app.services.binance_sync.local_today", lambda: date(2026, 10, 27))
     app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, encryption_key=ENCRYPTION_TEST_KEY)
