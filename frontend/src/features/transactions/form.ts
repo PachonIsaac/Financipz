@@ -92,7 +92,11 @@ export function validateTransactionForm(
 }
 
 /** Reduces a full payload to the fields that differ from the stored movement. */
-export function buildUpdate(payload: TransactionCreate, original: Transaction): TransactionUpdate {
+export function buildUpdate(
+  payload: TransactionCreate,
+  original: Transaction,
+  accounts: Account[] = [],
+): TransactionUpdate {
   const update: TransactionUpdate = {}
   if (payload.account_id !== original.account_id) update.account_id = payload.account_id
   if (payload.amount !== original.amount) update.amount = payload.amount
@@ -104,7 +108,14 @@ export function buildUpdate(payload: TransactionCreate, original: Transaction): 
     if ((payload.target_account_id ?? null) !== original.target_account_id) {
       update.target_account_id = payload.target_account_id ?? null
     }
-    if (payload.target_amount && payload.target_amount !== original.target_amount) {
+    const source = accounts.find((a) => a.id === payload.account_id)
+    const target = accounts.find((a) => a.id === payload.target_account_id)
+    const crossCurrency = source !== undefined && target !== undefined && source.currency !== target.currency
+    // The backend recomputes the received amount from the rate when none is sent, so a
+    // cross-currency transfer always sends it once the amount or an account changes.
+    const involvedChanged =
+      update.amount !== undefined || update.account_id !== undefined || update.target_account_id !== undefined
+    if (payload.target_amount && (payload.target_amount !== original.target_amount || (crossCurrency && involvedChanged))) {
       update.target_amount = payload.target_amount
     }
   }

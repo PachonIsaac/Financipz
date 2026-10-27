@@ -28,10 +28,12 @@ body {
 }
 
 /* Inputs below 16px make iOS zoom the page on focus. */
-input,
-select,
-textarea {
-  font-size: 16px;
+@layer base {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 .tabular {

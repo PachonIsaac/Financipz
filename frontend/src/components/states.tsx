@@ -76,7 +76,7 @@ export function OfflineBanner() {
   }, [])
   if (online) return null
   return (
-    <p role="status" className="bg-amber-200 px-4 py-2 text-center text-sm text-amber-900">
+    <p role="status" className="bg-amber-200 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-center text-sm text-amber-900">
       Sin conexión. Mostrando los últimos datos cargados.
     </p>
   )

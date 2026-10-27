@@ -103,7 +103,7 @@ export function MovementDetailScreen() {
           error={update.error}
           lockType
           onSubmit={(payload) => {
-            const changes = buildUpdate(payload, tx)
+            const changes = buildUpdate(payload, tx, accountList)
             if (Object.keys(changes).length === 0) {
               setEditing(false)
               return

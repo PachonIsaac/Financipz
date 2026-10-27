@@ -94,19 +94,24 @@ export function parseAmountInput(input: string, options: { allowNegative?: boole
   }
   if (text === '') return null
 
+  const GROUPED = /^\d{1,3}(\.\d{3})+$/
   let whole: string
   let fraction = ''
   if (text.includes(',')) {
     const parts = text.split(',')
     if (parts.length !== 2) return null
-    whole = (parts[0] ?? '').replace(/\./g, '')
+    const rawWhole = parts[0] ?? ''
+    if (rawWhole !== '' && !/^\d+$/.test(rawWhole) && !GROUPED.test(rawWhole)) return null
+    whole = rawWhole.replace(/\./g, '')
     fraction = parts[1] ?? ''
   } else if (/^\d+\.\d{1,2}$/.test(text)) {
     const [w = '', f = ''] = text.split('.')
     whole = w
     fraction = f
-  } else {
+  } else if (/^\d+$/.test(text) || GROUPED.test(text)) {
     whole = text.replace(/\./g, '')
+  } else {
+    return null
   }
   if (whole === '') whole = '0'
   if (!/^\d+$/.test(whole) || !/^\d{0,2}$/.test(fraction)) return null

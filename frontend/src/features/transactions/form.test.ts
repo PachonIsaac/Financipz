@@ -144,3 +144,54 @@ describe('buildUpdate', () => {
     expect(buildUpdate(payload!, original)).toEqual({ category_id: null, note: 'hola' })
   })
 })
+
+describe('buildUpdate for cross-currency transfers', () => {
+  const transfer: Transaction = {
+    id: 't2',
+    account_id: 'a',
+    target_account_id: 'usd',
+    target_text: null,
+    classification: null,
+    category_id: null,
+    type: 'transfer',
+    amount: '400000.00',
+    currency: 'COP',
+    target_amount: '100.00',
+    fx_rate: '4000.00',
+    date: '2026-10-20T17:00:00Z',
+    merchant: null,
+    note: null,
+    source: 'manual',
+    source_id: null,
+    status: 'confirmed',
+    external_reference: null,
+    created_at: '2026-10-20T17:00:00Z',
+    updated_at: '2026-10-20T17:00:00Z',
+  }
+  const values = {
+    ...emptyFormValues('2026-10-20', 'a'),
+    type: 'transfer' as const,
+    targetAccountId: 'usd',
+    amount: '400000',
+    targetAmount: '100',
+  }
+
+  it('sends nothing when nothing changed', () => {
+    const { payload } = validateTransactionForm(values, accounts, now)
+    expect(buildUpdate(payload!, transfer, accounts)).toEqual({})
+  })
+
+  it('sends the received amount when the amount changes', () => {
+    const { payload } = validateTransactionForm({ ...values, amount: '420000' }, accounts, now)
+    expect(buildUpdate(payload!, transfer, accounts)).toEqual({ amount: '420000.00', target_amount: '100.00' })
+  })
+
+  it('sends the received amount when the destination changes', () => {
+    const other = { ...accounts[2]!, id: 'usd2' }
+    const { payload } = validateTransactionForm({ ...values, targetAccountId: 'usd2' }, [...accounts, other], now)
+    expect(buildUpdate(payload!, transfer, [...accounts, other])).toEqual({
+      target_account_id: 'usd2',
+      target_amount: '100.00',
+    })
+  })
+})

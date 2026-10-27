@@ -94,4 +94,20 @@ describe('parseAmountInput', () => {
   it('strips leading zeros and symbols', () => {
     expect(parseAmountInput('$ 007')).toBe('7.00')
   })
+
+  it.each([
+    ['1.000.50', null],
+    ['1.00.000', null],
+    ['12.3456', null],
+    ['1..000', null],
+    ['.500', null],
+    ['1.000', '1000.00'],
+    ['1.000.000', '1000000.00'],
+    ['1.5', '1.50'],
+    ['1.000,5', '1000.50'],
+    ['1.00,5', null],
+    ['10.000.00', null],
+  ])('parses %s as %s', (input, expected) => {
+    expect(parseAmountInput(input)).toBe(expected)
+  })
 })
