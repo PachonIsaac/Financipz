@@ -77,14 +77,16 @@ def fetch_current() -> PublishedRate:
     return PublishedRate(day=updated.astimezone(LOCAL_TIMEZONE).date(), value=value)
 
 
-def _row_to_days(item: object, first: date, last: date) -> list[PublishedRate]:
+def _row_to_days(item: dict, first: date, last: date) -> list[PublishedRate]:
     """The days from `first` to `last` that one portal record covers, each with the record's rate."""
+    if not isinstance(item, dict):
+        raise TrmError("Unexpected row from the open data portal")
     try:
-        if item["unidad"] != "COP":  # type: ignore[index]
+        if item["unidad"] != "COP":
             raise TrmError("The rate is not in pesos")
-        valid_from = date.fromisoformat(str(item["vigenciadesde"])[:10])  # type: ignore[index]
-        valid_to = date.fromisoformat(str(item["vigenciahasta"])[:10])  # type: ignore[index]
-        value = parse_value(item["valor"])  # type: ignore[index]
+        valid_from = date.fromisoformat(str(item["vigenciadesde"])[:10])
+        valid_to = date.fromisoformat(str(item["vigenciahasta"])[:10])
+        value = parse_value(item["valor"])
     except (KeyError, TypeError, ValueError):
         raise TrmError("Unexpected row from the open data portal") from None
     if valid_to < valid_from or valid_to - valid_from > timedelta(days=MAX_PERIOD_DAYS):
