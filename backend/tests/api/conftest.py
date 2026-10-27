@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, get_current_user
 from app.core.config import Settings, get_settings
-from app.db.session import KEEPALIVE_ARGS, get_db
+from app.db.session import KEEPALIVE_ARGS, get_db, get_session_factory
 from app.integrations import binance
 from app.main import app
 from tests.api.binance_fake import ALLOWED_ENDPOINTS, FakeExchange
@@ -89,6 +89,7 @@ def client(connection: Connection) -> Iterator[TestClient]:
             yield session
 
     app.dependency_overrides[get_db] = request_session
+    app.dependency_overrides[get_session_factory] = lambda: (lambda: new_session(connection))
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="test-user", email=None)
     yield TestClient(app)
     app.dependency_overrides.clear()

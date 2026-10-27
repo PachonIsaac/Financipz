@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     allowed_user_emails: str = ""
     # Fernet key (urlsafe base64, 32 bytes) that encrypts third-party credentials stored in the database.
     encryption_key: str = ""
+    # Refresh exchange rates and balances in the background when the process starts, if they are stale.
+    refresh_on_startup: bool = False
+    # Shortest time between two refreshes; a request in that window gets the previous result.
+    refresh_min_interval_seconds: int = 300
+    # Serve the interactive API docs and the OpenAPI schema.
+    docs_enabled: bool = True
 
     @property
     def origins(self) -> list[str]:
