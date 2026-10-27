@@ -76,12 +76,25 @@ def test_an_unknown_flag_that_is_true_refuses_the_key():
     assert verdict.problems == ("enableSomethingNew",)
 
 
-def test_unknown_values_that_are_not_true_are_ignored():
+def test_unknown_values_that_are_not_capabilities_are_ignored():
     verdict = evaluate_key_restrictions(
-        safe_restrictions(enableSomethingNew=False, tradingAuthorityExpirationTime=1800000000000, note="x")
+        safe_restrictions(enableSomethingNew=False, tradingAuthorityExpirationTime=1800000000000, note="x", extra=None)
     )
 
     assert verdict.accepted
+
+
+@pytest.mark.parametrize("value", [True, 1, "true", "false", "", None, {}, [], {"a": 1}, [False], 0])
+@pytest.mark.parametrize("name", ["enableSomethingNew", "permitsOtherThing", "ENABLEUPPER", "PermitsMixed", "enable"])
+def test_an_unknown_capability_must_be_exactly_false(name, value):
+    verdict = evaluate_key_restrictions(safe_restrictions(**{name: value}))
+
+    assert verdict.problems == (name,)
+
+
+@pytest.mark.parametrize("name", ["enableSomethingNew", "permitsOtherThing", "ENABLEUPPER"])
+def test_an_unknown_capability_that_is_false_is_fine(name):
+    assert evaluate_key_restrictions(safe_restrictions(**{name: False})).accepted
 
 
 def test_the_optional_flag_may_be_absent():

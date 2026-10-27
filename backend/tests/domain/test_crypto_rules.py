@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from app.domain.crypto import merge_quantities, select_symbols, summarize_values, value_in_usd
+from app.domain.crypto import drop_earn_tokens, merge_quantities, select_symbols, summarize_values, value_in_usd
 
 D = Decimal
 PRICES = {
@@ -72,3 +72,33 @@ def test_a_pair_is_not_repeated_and_unlisted_guesses_are_dropped():
 
 def test_an_asset_is_not_paired_with_itself():
     assert select_symbols(["USDT"], [], {"USDTUSDT", "USDTBTC"}) == ["USDTBTC"]
+
+
+LD_PRICES = {"BTCUSDT": D("80000"), "LDOUSDT": D("2"), "BNBUSDT": D("600")}
+
+
+def test_earn_wrappers_of_priced_assets_are_dropped():
+    entries = [("LDBTC", D("1")), ("BTC", D("2")), ("LDUSDT", D("5")), ("LDBNB", D("1"))]
+
+    kept = [asset for asset, _ in drop_earn_tokens(entries, LD_PRICES)]
+    # LDBTC and LDUSDT wrap priced assets. LDBNB also wraps one (BNB is priced).
+    assert kept == ["BTC"]
+
+
+def test_a_token_that_really_starts_with_ld_is_kept():
+    # LDO has its own price and "O" is not a priced asset.
+    assert drop_earn_tokens([("LDO", D("3"))], LD_PRICES) == [("LDO", D("3"))]
+
+
+def test_an_ld_entry_with_its_own_price_is_kept_even_if_the_base_is_priced():
+    prices = {"BTCUSDT": D("80000"), "LDBTCUSDT": D("1")}
+
+    assert drop_earn_tokens([("LDBTC", D("1"))], prices) == [("LDBTC", D("1"))]
+
+
+def test_an_ld_entry_whose_base_cannot_be_priced_is_kept():
+    assert drop_earn_tokens([("LDXYZ", D("1"))], LD_PRICES) == [("LDXYZ", D("1"))]
+
+
+def test_a_bare_ld_is_not_a_wrapper():
+    assert drop_earn_tokens([("LD", D("1"))], LD_PRICES) == [("LD", D("1"))]

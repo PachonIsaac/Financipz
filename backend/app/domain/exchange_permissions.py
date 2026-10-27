@@ -20,6 +20,9 @@ OPTIONAL_DANGEROUS_FLAGS = ("enableFixApiTrade",)
 # Flags that are true on a safe key or that do not grant anything.
 HARMLESS_FLAGS = ("ipRestrict", "enableFixReadOnly")
 
+# Names that look like a capability. Any such flag this code does not know must be exactly false.
+CAPABILITY_PREFIXES = ("enable", "permits")
+
 KNOWN_FLAGS = frozenset((READ_FLAG, *DANGEROUS_FLAGS, *OPTIONAL_DANGEROUS_FLAGS, *HARMLESS_FLAGS))
 
 
@@ -39,7 +42,8 @@ def evaluate_key_restrictions(restrictions: Mapping[str, object]) -> KeyVerdict:
     """Accept the key only if reading is on and every known or unknown capability is off.
 
     Fail closed: a dangerous flag that is missing or not a boolean counts as a problem, and so does any
-    flag this code does not know that is true (the exchange may add new capabilities over time).
+    unknown capability flag (named like `enable...` or `permits...`) that is not exactly false, or any other
+    unknown flag that is true (the exchange may add new capabilities over time).
     """
     problems: list[str] = []
 
@@ -52,7 +56,13 @@ def evaluate_key_restrictions(restrictions: Mapping[str, object]) -> KeyVerdict:
         if flag in restrictions and restrictions[flag] is not False:
             problems.append(flag)
     for flag in sorted(restrictions):
-        if flag not in KNOWN_FLAGS and restrictions[flag] is True:
+        if flag in KNOWN_FLAGS:
+            continue
+        # A new capability the exchange adds is only safe when it is explicitly off.
+        if flag.lower().startswith(CAPABILITY_PREFIXES):
+            if restrictions[flag] is not False:
+                problems.append(flag)
+        elif restrictions[flag] is True:
             problems.append(flag)
 
     return KeyVerdict(problems=tuple(problems), ip_restricted=restrictions.get("ipRestrict") is True)

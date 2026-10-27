@@ -84,3 +84,29 @@ def select_symbols(
                 seen.add(symbol)
                 ordered.append(symbol)
     return ordered
+
+
+EARN_TOKEN_PREFIX = "LD"
+
+
+def drop_earn_tokens(
+    entries: Iterable[tuple[str, Decimal]], prices: Mapping[str, Decimal]
+) -> list[tuple[str, Decimal]]:
+    """Remove the `LD<X>` entries the spot wallet may list for flexible earn positions.
+
+    Those positions are read from the earn wallet, so keeping both would count them twice. An entry is only
+    dropped when `X` can be priced and the entry itself cannot: a token that really starts with LD (such as
+    LDO) has its own price and stays.
+    """
+    kept = []
+    for asset, quantity in entries:
+        base = asset[len(EARN_TOKEN_PREFIX):]
+        is_wrapper = (
+            asset.startswith(EARN_TOKEN_PREFIX)
+            and base != ""
+            and value_in_usd(base, Decimal(1), prices) is not None
+            and value_in_usd(asset, Decimal(1), prices) is None
+        )
+        if not is_wrapper:
+            kept.append((asset, quantity))
+    return kept
