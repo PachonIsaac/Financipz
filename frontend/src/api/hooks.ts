@@ -1,0 +1,174 @@
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query'
+import { ApiError } from './client'
+import { useApi } from './ApiProvider'
+import type {
+  AccountCreate,
+  AccountUpdate,
+  AdjustmentCreate,
+  CategoryCreate,
+  CategoryType,
+  CategoryUpdate,
+  Identifier,
+  TransactionCreate,
+  TransactionFilters,
+  TransactionUpdate,
+} from './types'
+
+export const keys = {
+  accounts: ['accounts'] as const,
+  categories: ['categories'] as const,
+  transactions: ['transactions'] as const,
+  identifiers: (accountId: string) => ['identifiers', accountId] as const,
+  summary: (month: string) => ['summary', month] as const,
+}
+
+/** Balances depend on movements and vice versa, so money mutations refresh all of them. */
+function refreshMoney(client: QueryClient): Promise<unknown> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: keys.accounts }),
+    client.invalidateQueries({ queryKey: keys.transactions }),
+    client.invalidateQueries({ queryKey: ['summary'] }),
+  ])
+}
+
+export function useAccounts() {
+  const api = useApi()
+  return useQuery({ queryKey: keys.accounts, queryFn: () => api.listAccounts() })
+}
+
+export function useCategories(type?: CategoryType) {
+  const api = useApi()
+  return useQuery({ queryKey: [...keys.categories, type ?? 'all'], queryFn: () => api.listCategories(type) })
+}
+
+export function useTransactionList(filters: TransactionFilters) {
+  const api = useApi()
+  return useInfiniteQuery({
+    queryKey: [...keys.transactions, 'list', filters],
+    queryFn: ({ pageParam }) => api.listTransactions(filters, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+  })
+}
+
+export function useTransaction(id: string) {
+  const api = useApi()
+  return useQuery({ queryKey: [...keys.transactions, 'detail', id], queryFn: () => api.getTransaction(id) })
+}
+
+export function useSummary(month: string) {
+  const api = useApi()
+  return useQuery({
+    queryKey: keys.summary(month),
+    queryFn: () => api.getSummary(month),
+    // A missing endpoint is a normal state for now, not something to retry.
+    retry: (count, error) => !(error instanceof ApiError && error.status < 500 && error.status !== 0) && count < 2,
+  })
+}
+
+export function useIdentifiers(accountId: string) {
+  const api = useApi()
+  return useQuery({ queryKey: keys.identifiers(accountId), queryFn: () => api.listIdentifiers(accountId) })
+}
+
+export function useCreateTransaction() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: TransactionCreate) => api.createTransaction(body),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useUpdateTransaction(id: string) {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: TransactionUpdate) => api.updateTransaction(id, body),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useDeleteTransaction() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.deleteTransaction(id),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useCreateAccount() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: AccountCreate) => api.createAccount(body),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useUpdateAccount() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: AccountUpdate }) => api.updateAccount(id, body),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useAdjustAccount() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: AdjustmentCreate }) => api.adjustAccount(id, body),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useReplaceIdentifiers() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, identifiers }: { id: string; identifiers: Identifier[] }) =>
+      api.replaceIdentifiers(id, identifiers),
+    onSuccess: (_data, { id }) => client.invalidateQueries({ queryKey: keys.identifiers(id) }),
+  })
+}
+
+export function useCreateCategory() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: CategoryCreate) => api.createCategory(body),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.categories }),
+  })
+}
+
+export function useUpdateCategory() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CategoryUpdate }) => api.updateCategory(id, body),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.categories }),
+  })
+}
+
+export function useDeleteCategory() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, reassignTo }: { id: string; reassignTo?: string }) => api.deleteCategory(id, reassignTo),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: keys.categories }),
+        client.invalidateQueries({ queryKey: keys.transactions }),
+        client.invalidateQueries({ queryKey: ['summary'] }),
+      ]),
+  })
+}
