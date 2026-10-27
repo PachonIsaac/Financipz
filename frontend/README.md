@@ -14,7 +14,7 @@ Other scripts: `npm run build`, `npm test`, `npm run lint`, `npm run typecheck`.
 
 ## Environment
 
-See `.env.example`. `VITE_BASE` sets the sub-path the app is served from (default `/`).
+See `.env.example`. Production builds fail unless `VITE_API_URL` is set; in development it defaults to the local backend. `VITE_BASE` sets the sub-path the app is served from (default `/`).
 Authentication uses the auth client only for sign in, sign out and token refresh; all data
 comes from the backend REST API with a bearer token.
 
