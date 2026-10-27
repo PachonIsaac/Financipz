@@ -276,6 +276,22 @@ def test_everything_is_saved_not_only_the_accounts(connection, backup_file):
     assert archived is True
 
 
+def test_marked_movements_are_imported_as_balance_adjustments(db, backup_file):
+    marked = ImportMapping.model_validate({**MAPPING, "adjustment_movements": ["mov-3", "mov-4"]})
+
+    report = run_import(db, read_backup(backup_file), marked, SINCE)
+
+    assert report.adjustments_imported == 2
+    income_correction = db.scalar(select(models.Transaction).where(models.Transaction.source_id == "mov-3"))
+    expense_correction = db.scalar(select(models.Transaction).where(models.Transaction.source_id == "mov-4"))
+    assert (income_correction.type, income_correction.amount) == ("adjustment_in", D("2000000.00"))
+    assert (expense_correction.type, expense_correction.amount) == ("adjustment_out", D("80000.00"))
+    assert income_correction.category_id is None and expense_correction.category_id is None
+    assert income_correction.note and expense_correction.note
+    # An adjustment moves the balance exactly like the movement it replaces.
+    assert all(expected == actual for _, expected, actual in report.balances)
+
+
 def test_running_the_import_twice_changes_nothing(db, backup_file):
     backup = read_backup(backup_file)
     run_import(db, backup, mapping(), SINCE)

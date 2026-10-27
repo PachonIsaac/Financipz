@@ -36,6 +36,7 @@ from app.services.balances import account_balances
 
 SOURCE = "myfinance_import"
 UNKNOWN_ORIGIN_NOTE = "Pago de tarjeta sin origen conocido"
+ADJUSTMENT_NOTE = "Ajuste de saldo importado"
 
 
 class ImportError_(Exception):
@@ -64,6 +65,9 @@ class ImportMapping(BaseModel):
     extra_categories: list[dict[str, str]] = []
     # Account that is the source of card payments whose real origin is unknown.
     unknown_origin_name: str = "Origen no identificado"
+    # Ids of backup movements that were manual balance corrections. They are imported as balance
+    # adjustments, which do not count in the cash flow.
+    adjustment_movements: list[str] = []
 
 
 @dataclass
@@ -74,6 +78,7 @@ class ImportReport:
     movements_imported: int = 0
     movements_skipped: int = 0
     card_payments_without_origin: int = 0
+    adjustments_imported: int = 0
     transfers_imported: int = 0
     transfers_skipped: int = 0
     warnings: list[str] = field(default_factory=list)
@@ -113,6 +118,7 @@ def run_import(db: Session, backup: Backup, mapping: ImportMapping, since: date)
     types = {uid: AccountType(row.type) for uid, row in rows.items()}
 
     origin = None
+    adjustment_ids = set(mapping.adjustment_movements)
     categories = _CategoryResolver(db, backup, mapping, report)
     imported = set(db.scalars(select(models.Transaction.source_id).where(models.Transaction.source == SOURCE)))
 
@@ -133,7 +139,17 @@ def run_import(db: Session, backup: Backup, mapping: ImportMapping, since: date)
             "status": "confirmed",
         }
 
-        if movement.kind == "income" and types[movement.account_uid] is AccountType.CREDIT_CARD:
+        if movement.uid in adjustment_ids:
+            db.add(
+                models.Transaction(
+                    **common,
+                    account_id=account.id,
+                    type="adjustment_in" if movement.kind == "income" else "adjustment_out",
+                    note=_join_notes(ADJUSTMENT_NOTE, movement.note),
+                )
+            )
+            report.adjustments_imported += 1
+        elif movement.kind == "income" and types[movement.account_uid] is AccountType.CREDIT_CARD:
             # A deposit on a card is a payment. The account it came from is not in the backup.
             origin = origin or _ensure_unknown_origin(db, mapping)
             db.add(
@@ -372,6 +388,7 @@ def _print_report(report: ImportReport, applied: bool) -> None:
     print(f"categories created: {report.categories_created}")
     print(f"movements imported: {report.movements_imported}, already there: {report.movements_skipped}")
     print(f"card payments with unknown origin: {report.card_payments_without_origin}")
+    print(f"balance adjustments: {report.adjustments_imported}")
     print(f"transfers imported: {report.transfers_imported}, already there: {report.transfers_skipped}")
     for warning in sorted(set(report.warnings)):
         print(f"warning: {warning} (x{report.warnings.count(warning)})")
