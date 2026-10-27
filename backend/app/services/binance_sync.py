@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
 from app.db import models
-from app.domain.crypto import merge_quantities, select_symbols, summarize_values, value_in_usd
+from app.domain.crypto import drop_earn_tokens, merge_quantities, select_symbols, summarize_values, value_in_usd
 from app.domain.entities import AccountType, Currency
 from app.domain.periods import local_today
 from app.integrations import binance
@@ -28,8 +28,9 @@ EXCHANGE_ACCOUNT_NAME = "Binance"
 MAX_REQUESTS_PER_SYNC = 120
 MAX_PAGES_PER_SYMBOL = 5
 
-# Answers that mean "this key cannot read that wallet", as opposed to "the exchange is in trouble".
-PERMISSION_KINDS = (binance.ACCESS_DENIED, binance.INVALID_CREDENTIALS, binance.REJECTED)
+# The only answer that means "this key cannot read that wallet". Any other failure could be temporary, and
+# skipping the wallet would store a total that is too low.
+PERMISSION_KINDS = (binance.ACCESS_DENIED,)
 
 SKIPPED_WALLETS = {
     "funding": Notice("funding_wallet_skipped", "No se pudo leer la billetera de fondos con esta clave; se omitió."),
@@ -38,6 +39,10 @@ SKIPPED_WALLETS = {
     ),
     "earn_locked": Notice("earn_locked_skipped", "No se pudo leer Simple Earn bloqueado con esta clave; se omitió."),
 }
+ASSETS_SKIPPED = Notice(
+    "asset_skipped",
+    "Se omitieron activos con un nombre no reconocido; no se incluyeron en el total.",
+)
 TRADES_INCOMPLETE = Notice(
     "trades_incomplete",
     "No se alcanzaron a traer todas las operaciones; se completarán en la próxima sincronización.",
@@ -82,12 +87,15 @@ def ensure_exchange_account(db: Session) -> models.Account:
     return account
 
 
-def _read_wallets(client: BinanceClient) -> tuple[dict[str, Decimal], list[Notice]]:
+def _read_wallets(client: BinanceClient, prices: dict[str, Decimal]) -> tuple[dict[str, Decimal], list[Notice]]:
     """Quantity per asset across the spot, funding and earn wallets.
 
-    The spot wallet is required. The others are skipped, with a notice, when the key may not read them.
+    The spot wallet is required. The others are skipped, with a notice, only when the key may not read them.
     """
-    wallets = [client.spot_balances()]
+    spot = client.spot_balances()
+    skipped = spot.skipped
+    # Flexible earn positions can also show up in spot as `LD<ASSET>`; they are read from the earn wallet.
+    wallets = [drop_earn_tokens(spot.balances, prices)]
     notices: list[Notice] = []
     optional = (
         ("funding", client.funding_balances),
@@ -96,11 +104,16 @@ def _read_wallets(client: BinanceClient) -> tuple[dict[str, Decimal], list[Notic
     )
     for name, read in optional:
         try:
-            wallets.append(read())
+            wallet = read()
         except BinanceError as error:
             if error.kind not in PERMISSION_KINDS:
                 raise
             notices.append(SKIPPED_WALLETS[name])
+            continue
+        wallets.append(wallet.balances)
+        skipped += wallet.skipped
+    if skipped:
+        notices.append(ASSETS_SKIPPED)
     return merge_quantities(*wallets), notices
 
 
@@ -140,8 +153,11 @@ def _fetch_trades(client: BinanceClient, symbols: list[str], last_ids: dict[str,
     return trades, True
 
 
-def _mark_error(db: Session, row: models.Integration, notice: Notice) -> None:
+def _mark_error(db: Session, row: models.Integration, notice: Notice, forget_secret: bool = False) -> None:
     db.rollback()
+    if forget_secret:
+        # A key that can do more than read is not kept at all.
+        row.encrypted_secret = None
     row.status = "error"
     row.warnings = [notice.as_json()]
     db.commit()
@@ -212,14 +228,14 @@ def sync_binance(db: Session, encryption_key: str) -> SyncResult:
     with binance.build_client(credentials) as client:
         try:
             notices = integrations.check_key(client)
-            quantities, wallet_notices = _read_wallets(client)
             prices = client.prices()
+            quantities, wallet_notices = _read_wallets(client, prices)
             traded = _last_trade_ids(db)
             symbols = select_symbols(quantities, traded, prices)
             trades, trades_complete = _fetch_trades(client, symbols, traded)
         except integrations.KeyRejected:
             # The key gained permissions after it was connected: stop using it.
-            _mark_error(db, row, integrations.KEY_NOT_READ_ONLY)
+            _mark_error(db, row, integrations.KEY_NOT_READ_ONLY, forget_secret=True)
             raise
         except ApiError as error:
             if error.code in ("binance_invalid_credentials", "binance_access_denied"):
