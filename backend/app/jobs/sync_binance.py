@@ -1,5 +1,6 @@
 """Job: read the exchange balances and new trades. Run with `python -m app.jobs.sync_binance`."""
 
+import argparse
 import sys
 
 from sqlalchemy.orm import Session
@@ -10,7 +11,12 @@ from app.db.session import get_engine
 from app.services import binance_sync
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    # The job takes no options, but it must answer --help (and refuse unknown options) instead of
+    # silently running a sync. Called without arguments (as the tests do) it reads none.
+    parser = argparse.ArgumentParser(description="Store today's balances and any new spot trades of the connected exchange (read-only).")
+    parser.parse_args([] if argv is None else argv)
+
     settings = get_settings()
     if not settings.database_url:
         print("DATABASE_URL is not configured", file=sys.stderr)
@@ -34,4 +40,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

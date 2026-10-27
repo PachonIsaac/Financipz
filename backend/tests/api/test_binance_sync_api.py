@@ -642,3 +642,26 @@ def test_earn_wrappers_in_spot_are_not_counted_twice_but_real_ld_tokens_are_kept
 
     assert response.status_code == 200
     assert balances(db) == {"BTC": (D("1"), D("80000")), "LDO": (D("10"), D("20"))}
+
+
+def test_the_job_answers_help_without_syncing(monkeypatch, capsys):
+    called = []
+    monkeypatch.setattr(sync_binance, "get_settings", lambda: called.append("settings") or None)
+
+    with pytest.raises(SystemExit) as stop:
+        sync_binance.main(["--help"])
+
+    assert stop.value.code == 0
+    assert "read-only" in capsys.readouterr().out
+    assert called == []
+
+
+def test_the_job_refuses_unknown_options_without_syncing(monkeypatch):
+    called = []
+    monkeypatch.setattr(sync_binance, "get_settings", lambda: called.append("settings") or None)
+
+    with pytest.raises(SystemExit) as stop:
+        sync_binance.main(["--whatever"])
+
+    assert stop.value.code == 2
+    assert called == []
