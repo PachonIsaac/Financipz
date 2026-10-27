@@ -35,7 +35,7 @@ def test_month_start():
 
 def test_parse_month():
     assert parse_month("2026-02") == date(2026, 2, 1)
-    for bad in ("2026-13", "2026-2", "26-02", "2026/02", "abcd-ef", "2026-02-01", ""):
+    for bad in ("2026-13", "2026-2", "26-02", "2026/02", "abcd-ef", "2026-02-01", "", "9999-12", "0001-03", "1999-12", "2101-01"):
         with pytest.raises(DomainError):
             parse_month(bad)
 
@@ -44,3 +44,8 @@ def test_local_today_uses_colombian_time():
     # 02:30 UTC on the 1st is still the evening of the previous day in Colombia (UTC-5).
     assert local_today(datetime(2026, 11, 1, 2, 30, tzinfo=timezone.utc)) == date(2026, 10, 31)
     assert local_today(datetime(2026, 11, 1, 5, 0, tzinfo=timezone.utc)) == date(2026, 11, 1)
+
+
+def test_parse_month_accepts_the_edges_of_the_year_range():
+    assert parse_month("2000-01") == date(2000, 1, 1)
+    assert parse_month("2100-12") == date(2100, 12, 1)

@@ -74,7 +74,7 @@ def monthly_summary(db: Session, month: date) -> SummaryOut:
         )
     ]
     categories = {row.id: row for row in db.scalars(select(models.Category))}
-    fx = load_rates(db, window_end)
+    fx = load_rates(db, window_start, window_end)
 
     flows: dict[date, FlowSummary] = {}
     try:

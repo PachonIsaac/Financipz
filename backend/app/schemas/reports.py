@@ -53,7 +53,8 @@ class WealthAccount(Output):
     archived: bool
     # In the account's own currency; can be negative.
     balance: Cents
-    balance_cop: Cents
+    # Null for exchange and system accounts when no rate could value them.
+    balance_cop: Cents | None
 
 
 class LoanOut(Output):

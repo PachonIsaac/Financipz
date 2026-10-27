@@ -1,24 +1,31 @@
+from datetime import date
+from decimal import Decimal
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
 from app.db import models
-from app.domain.entities import Currency
+from app.domain.entities import AccountType, Currency
 from app.domain.errors import DomainError
 from app.domain.fx import FxRates
 from app.domain.periods import local_today
 from app.domain.wealth import compute_wealth
 from app.schemas.reports import CryptoOut, LoanOut, RateUsed, WealthAccount, WealthOut
 from app.services.balances import account_balances, to_domain_account
+from app.services.fx_rates import rate_on_or_before
+
+# Held apart from the user's money: they never take part in the valuation.
+OUTSIDE_WEALTH = frozenset({AccountType.EXCHANGE.value, AccountType.SYSTEM.value})
+MISSING_RATE = (
+    "Hay saldos en dólares y no hay una TRM registrada para convertirlos. Sincroniza la TRM e intenta de nuevo."
+)
 
 
-def _latest_rate(db: Session, today) -> models.FxRate | None:
-    return db.scalars(
-        select(models.FxRate)
-        .where(models.FxRate.currency == Currency.USD.value, models.FxRate.date <= today)
-        .order_by(models.FxRate.date.desc())
-        .limit(1)
-    ).first()
+def _value_in_cop(fx: FxRates, balance: Decimal, currency: str, today: date) -> Decimal:
+    if balance == 0:
+        return Decimal(0)
+    return fx.to_cop(balance, Currency(currency), today)
 
 
 def current_wealth(db: Session) -> WealthOut:
@@ -26,20 +33,24 @@ def current_wealth(db: Session) -> WealthOut:
     today = local_today()
     rows = list(db.scalars(select(models.Account).order_by(models.Account.name)))
     balances = account_balances(db)
-    rate = _latest_rate(db, today)
+    rate = rate_on_or_before(db, today)
     fx = FxRates({Currency.USD: {rate.date: rate.value}}) if rate else FxRates()
 
+    counted = [row for row in rows if row.type not in OUTSIDE_WEALTH]
     # An empty foreign currency account needs no rate to be worth zero.
-    valued = [row for row in rows if rate or row.currency == Currency.COP.value or balances[row.id] != 0]
+    valued = [row for row in counted if rate or row.currency == Currency.COP.value or balances[row.id] != 0]
     try:
         wealth = compute_wealth([to_domain_account(row) for row in valued], balances, fx, today)
-        values = {row.id: fx.to_cop(balances[row.id], Currency(row.currency), today) for row in valued}
+        values: dict = {row.id: _value_in_cop(fx, balances[row.id], row.currency, today) for row in counted}
     except DomainError:
-        raise ApiError(
-            409,
-            "missing_fx_rate",
-            "Hay saldos en dólares y no hay una TRM registrada para convertirlos. Sincroniza la TRM e intenta de nuevo.",
-        ) from None
+        raise ApiError(409, "missing_fx_rate", MISSING_RATE) from None
+
+    for row in rows:
+        if row.type in OUTSIDE_WEALTH:
+            try:
+                values[row.id] = _value_in_cop(fx, balances[row.id], row.currency, today)
+            except DomainError:
+                values[row.id] = None
 
     by_id = {row.id: row for row in rows}
     accounts = [
@@ -50,7 +61,7 @@ def current_wealth(db: Session) -> WealthOut:
             currency=row.currency,
             archived=row.archived,
             balance=balances[row.id],
-            balance_cop=values.get(row.id, 0),
+            balance_cop=values[row.id],
         )
         # Archived accounts only show while they still hold money.
         for row in rows

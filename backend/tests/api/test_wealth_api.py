@@ -149,3 +149,17 @@ def test_empty_usd_account_without_a_rate_is_worth_zero(client):
     assert body["rate"] is None
     dollars = next(item for item in body["accounts"] if item["name"] == "Dollars")
     assert dollars["balance_cop"] == "0.00"
+
+
+def test_a_usd_exchange_account_needs_no_rate(client):
+    create_account(client, name="Bank", type="bank", initial=10_000)
+    exchange = create_account(client, name="Exchange USD", type="exchange", currency="USD", initial=50)
+
+    response = client.get(f"{API}/wealth")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["available"] == "10000.00"
+    row = next(item for item in body["accounts"] if item["id"] == exchange["id"])
+    assert row["balance"] == "50.00"
+    assert row["balance_cop"] is None

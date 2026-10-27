@@ -159,7 +159,7 @@ def test_usd_movement_without_any_rate_is_a_clear_error(client, db):
     assert error_code(response) == "missing_fx_rate"
 
 
-@pytest.mark.parametrize("month", ["2026-13", "2026-00", "2026-1", "26-10", "october", "2026-10-01", "2026/10", ""])
+@pytest.mark.parametrize("month", ["2026-13", "2026-00", "2026-1", "26-10", "october", "2026-10-01", "2026/10", "", "9999-12", "0001-03", "1999-12"])
 def test_bad_month_is_rejected(client, month):
     response = client.get(f"{API}/summary", params={"month": month})
 
@@ -190,3 +190,23 @@ def test_few_queries_whatever_the_number_of_months(client, connection):
 
     selects = [statement for statement in statements if statement.lstrip().upper().startswith("SELECT")]
     assert len(selects) <= 4
+
+
+def test_adjustments_and_exchange_accounts_stay_out_of_the_flow(client):
+    bank = create_account(client, name="Bank", initial=100_000)
+    exchange = create_account(client, name="Exchange", type="exchange")
+    create_transaction(client, bank, "expense", 10_000, date="2026-10-05T09:00:00-05:00")
+    create_transaction(client, exchange, "income", 777_000, date="2026-10-05T09:00:00-05:00")
+    create_transaction(client, exchange, "expense", 555, date="2026-10-05T09:00:00-05:00")
+    adjusted_up = client.post(
+        f"{API}/accounts/{bank['id']}/adjustments", json={"observed_balance": "500000", "note": "count"}
+    )
+    adjusted_down = client.post(
+        f"{API}/accounts/{bank['id']}/adjustments", json={"observed_balance": "1000", "note": "count"}
+    )
+    assert adjusted_up.status_code == 201 and adjusted_down.status_code == 201
+
+    body = summary(client).json()
+
+    assert body["income"] == "0.00"
+    assert body["expenses"] == "10000.00"

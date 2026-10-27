@@ -3,6 +3,9 @@ from datetime import date, datetime
 from app.domain.entities import LOCAL_TIMEZONE
 from app.domain.errors import DomainError
 
+MIN_YEAR = 2000
+MAX_YEAR = 2100
+
 
 def local_today(now: datetime | None = None) -> date:
     """Today's calendar day in the user's timezone."""
@@ -41,6 +44,8 @@ def parse_month(value: str) -> date:
     try:
         year, month = value.split("-")
         if len(year) != 4 or len(month) != 2:
+            raise ValueError
+        if not MIN_YEAR <= int(year) <= MAX_YEAR:
             raise ValueError
         return date(int(year), int(month), 1)
     except ValueError:
