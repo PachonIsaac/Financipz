@@ -1,23 +1,47 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
+import { useTransactionList } from '../api/hooks'
 import { OfflineBanner } from './states'
 
 const TAB_BASE = 'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium'
 const TAB_IDLE = 'text-slate-500 dark:text-slate-400'
 const TAB_ACTIVE = 'text-emerald-700 dark:text-emerald-400'
 
-function Tab({ to, label, end = false, icon }: { to: string; label: string; end?: boolean; icon: string }) {
+function Tab({
+  to,
+  label,
+  end = false,
+  icon,
+  badge,
+}: {
+  to: string
+  label: string
+  end?: boolean
+  icon: string
+  badge?: string | undefined
+}) {
   return (
     <NavLink to={to} end={end} className={({ isActive }) => `${TAB_BASE} ${isActive ? TAB_ACTIVE : TAB_IDLE}`}>
       <span aria-hidden="true" className="text-lg leading-none">
         {icon}
       </span>
-      <span>{label}</span>
+      <span>
+        {label}
+        {badge ? (
+          <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[11px] text-slate-950">
+            {badge}
+            <span className="sr-only"> pendientes</span>
+          </span>
+        ) : null}
+      </span>
     </NavLink>
   )
 }
 
 export function AppLayout() {
+  const pending = useTransactionList({ status: 'pending_review' })
+  const first = pending.data?.pages[0]
+  const count = first ? `${first.items.length}${first.next_cursor ? '+' : ''}` : undefined
   return (
     <div className="mx-auto flex min-h-dvh max-w-xl flex-col">
       <OfflineBanner />
@@ -38,7 +62,7 @@ export function AppLayout() {
           >
             <span aria-hidden="true">+</span>
           </Link>
-          <Tab to="/review" label="Revisión" icon="✓" />
+          <Tab to="/review" label="Revisión" icon="✓" badge={first && first.items.length > 0 ? count : undefined} />
           <Tab to="/more" label="Más" icon="⋯" />
         </div>
       </nav>

@@ -5,7 +5,6 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query'
-import { ApiError } from './client'
 import { useApi } from './ApiProvider'
 import type {
   AccountCreate,
@@ -25,6 +24,7 @@ export const keys = {
   categories: ['categories'] as const,
   transactions: ['transactions'] as const,
   identifiers: (accountId: string) => ['identifiers', accountId] as const,
+  wealth: ['wealth'] as const,
   summary: (month: string) => ['summary', month] as const,
 }
 
@@ -34,6 +34,7 @@ function refreshMoney(client: QueryClient): Promise<unknown> {
     client.invalidateQueries({ queryKey: keys.accounts }),
     client.invalidateQueries({ queryKey: keys.transactions }),
     client.invalidateQueries({ queryKey: ['summary'] }),
+    client.invalidateQueries({ queryKey: keys.wealth }),
   ])
 }
 
@@ -57,19 +58,19 @@ export function useTransactionList(filters: TransactionFilters) {
   })
 }
 
-export function useTransaction(id: string) {
+export function useTransaction(id: string, enabled = true) {
   const api = useApi()
-  return useQuery({ queryKey: [...keys.transactions, 'detail', id], queryFn: () => api.getTransaction(id) })
+  return useQuery({ queryKey: [...keys.transactions, 'detail', id], queryFn: () => api.getTransaction(id), enabled })
 }
 
 export function useSummary(month: string) {
   const api = useApi()
-  return useQuery({
-    queryKey: keys.summary(month),
-    queryFn: () => api.getSummary(month),
-    // A missing endpoint is a normal state for now, not something to retry.
-    retry: (count, error) => !(error instanceof ApiError && error.status < 500 && error.status !== 0) && count < 2,
-  })
+  return useQuery({ queryKey: keys.summary(month), queryFn: () => api.getSummary(month) })
+}
+
+export function useWealth() {
+  const api = useApi()
+  return useQuery({ queryKey: keys.wealth, queryFn: () => api.getWealth() })
 }
 
 export function useIdentifiers(accountId: string) {
@@ -100,6 +101,28 @@ export function useDeleteTransaction() {
   const client = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api.deleteTransaction(id),
+    onSuccess: (_data, id) => {
+      // Drop the detail first so the screen never refetches a movement that is gone.
+      client.removeQueries({ queryKey: [...keys.transactions, 'detail', id] })
+      void refreshMoney(client)
+    },
+  })
+}
+
+export function useConfirmTransaction() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.confirmTransaction(id),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useDiscardTransaction() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.discardTransaction(id),
     onSuccess: () => refreshMoney(client),
   })
 }

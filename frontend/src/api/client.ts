@@ -32,12 +32,50 @@ export class ApiError extends Error {
   }
 }
 
+/** Short Spanish text for a Pydantic problem message. */
+export function translateProblem(problem: string): string {
+  const text = problem.toLowerCase()
+  if (text.includes('field required') || text.includes('cannot be null')) return 'es obligatorio'
+  if (text.includes('greater than 0') || text.includes('greater than zero')) return 'debe ser mayor que cero'
+  if (text.includes('greater than')) return 'es demasiado bajo'
+  if (text.includes('less than')) return 'es demasiado alto'
+  if (text.includes('at most') || text.includes('too long') || text.includes('decimal places')) {
+    return text.includes('decimal') ? 'tiene demasiados decimales' : 'es demasiado largo'
+  }
+  if (text.includes('at least') || text.includes('too short')) return 'es demasiado corto'
+  if (text.includes('digits')) return 'tiene demasiados dígitos'
+  if (text.includes('pattern') || text.includes('valid') || text.includes('should match')) return 'no tiene un formato válido'
+  return 'no es válido'
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  amount: 'Monto',
+  target_amount: 'Monto recibido',
+  account_id: 'Cuenta',
+  target_account_id: 'Cuenta destino',
+  category_id: 'Categoría',
+  merchant: 'Comercio',
+  note: 'Nota',
+  date: 'Fecha',
+  name: 'Nombre',
+  key: 'Llave',
+  counterparty: 'Persona',
+  initial_balance: 'Saldo inicial',
+  observed_balance: 'Saldo real',
+  digits: 'Dígitos',
+  parent_id: 'Categoría principal',
+}
+
+export function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? 'Dato'
+}
+
 /** Human-readable message for any thrown value. */
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const problems = error.fieldProblems
     if (problems.length > 0) {
-      return `${error.message} ${problems.map((p) => `${p.field}: ${p.problem}`).join('; ')}`
+      return `${error.message} ${problems.map((p) => `${fieldLabel(p.field)} ${translateProblem(p.problem)}.`).join(' ')}`
     }
     return error.message
   }

@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { ApiError } from '../../api/client'
+import { ApiError, translateProblem } from '../../api/client'
 import type { Account, Category, ManualTransactionType, TransactionCreate } from '../../api/types'
 import { Button, SelectField, TextAreaField, TextField } from '../../components/ui'
 import { FormError } from '../../components/states'
@@ -57,7 +57,7 @@ export function TransactionForm({
   if (error instanceof ApiError && error.fieldProblems.length > 0) {
     for (const problem of error.fieldProblems) {
       const field = mapApiField(problem.field)
-      if (field) serverErrors[field] = problem.problem
+      if (field) serverErrors[field] = `Este dato ${translateProblem(problem.problem)}.`
     }
     if (Object.keys(serverErrors).length > 0) serverFallback = null
   }

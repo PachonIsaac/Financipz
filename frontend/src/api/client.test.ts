@@ -58,14 +58,14 @@ describe('api client', () => {
         error: {
           code: 'validation_error',
           message: 'Revisa los datos enviados.',
-          details: { fields: [{ field: 'amount', problem: 'debe ser mayor que 0' }] },
+          details: { fields: [{ field: 'amount', problem: 'Input should be greater than 0' }] },
         },
       }),
     )
     const error = await client.request('/transactions').catch((e: unknown) => e)
     expect(error).toBeInstanceOf(ApiError)
-    expect((error as ApiError).fieldProblems).toEqual([{ field: 'amount', problem: 'debe ser mayor que 0' }])
-    expect(errorMessage(error)).toBe('Revisa los datos enviados. amount: debe ser mayor que 0')
+    expect((error as ApiError).fieldProblems).toEqual([{ field: 'amount', problem: 'Input should be greater than 0' }])
+    expect(errorMessage(error)).toBe('Revisa los datos enviados. Monto debe ser mayor que cero.')
   })
 
   it('signs out on 401', async () => {

@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { useAccounts, useCategories, useDeleteTransaction, useTransaction, useUpdateTransaction } from '../api/hooks'
+import {
+  useAccounts,
+  useCategories,
+  useConfirmTransaction,
+  useDeleteTransaction,
+  useDiscardTransaction, useTransaction, useUpdateTransaction } from '../api/hooks'
 import type { Transaction } from '../api/types'
 import { Amount } from '../components/Amount'
 import { PageHeader } from '../components/Layout'
@@ -41,17 +46,20 @@ export function MovementDetailScreen() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const toast = useToast()
-  const query = useTransaction(id)
+  const remove = useDeleteTransaction()
+  const query = useTransaction(id, !remove.isSuccess)
   const accounts = useAccounts()
   const categories = useCategories()
   const update = useUpdateTransaction(id)
-  const remove = useDeleteTransaction()
+  const confirm = useConfirmTransaction()
+  const discard = useDiscardTransaction()
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
   const back = { to: '/movements', label: 'Volver a movimientos' }
   const tx = query.data
 
+  if (remove.isSuccess) return null
   if (query.isPending) {
     return (
       <>
@@ -160,7 +168,7 @@ export function MovementDetailScreen() {
           </dl>
         </Card>
 
-        <FormError error={remove.error} />
+        <FormError error={remove.error ?? confirm.error ?? discard.error} />
 
         {confirmingDelete ? (
           <div
@@ -193,6 +201,17 @@ export function MovementDetailScreen() {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-2">
+            {tx.status === 'pending_review' ? (
+              <Button
+                className="col-span-2"
+                disabled={confirm.isPending}
+                onClick={() =>
+                  confirm.mutate(tx.id, { onSuccess: () => toast.show('Movimiento confirmado') })
+                }
+              >
+                {confirm.isPending ? 'Confirmando…' : 'Confirmar'}
+              </Button>
+            ) : null}
             {editable ? (
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 Editar
@@ -200,9 +219,23 @@ export function MovementDetailScreen() {
             ) : (
               <span />
             )}
-            <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
-              Eliminar
-            </Button>
+            {tx.source === 'manual' ? (
+              <Button variant="danger" onClick={() => setConfirmingDelete(true)}>
+                Eliminar
+              </Button>
+            ) : tx.status !== 'discarded' ? (
+              <Button
+                variant="danger"
+                disabled={discard.isPending}
+                onClick={() =>
+                  discard.mutate(tx.id, { onSuccess: () => toast.show('Movimiento descartado') })
+                }
+              >
+                {discard.isPending ? 'Descartando…' : 'Descartar'}
+              </Button>
+            ) : (
+              <span />
+            )}
           </div>
         )}
       </div>

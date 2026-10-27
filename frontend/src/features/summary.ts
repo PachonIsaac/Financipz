@@ -1,28 +1,4 @@
-const DECIMAL = /^-?\d+(\.\d{1,2})?$/
-
-export interface MonthSummary {
-  income: string
-  expenses: string
-  balance: string
-}
-
-function pickAmount(data: Record<string, unknown>, names: string[]): string | null {
-  for (const name of names) {
-    const value = data[name]
-    if (typeof value === 'string' && DECIMAL.test(value)) return value
-  }
-  return null
-}
-
-/** Reads the cash-flow totals of the month, or null when the payload does not carry them. */
-export function parseSummary(data: Record<string, unknown> | undefined): MonthSummary | null {
-  if (!data) return null
-  const income = pickAmount(data, ['income', 'total_income'])
-  const expenses = pickAmount(data, ['expenses', 'expense', 'total_expenses'])
-  const balance = pickAmount(data, ['balance'])
-  if (income === null || expenses === null || balance === null) return null
-  return { income, expenses, balance }
-}
+import { toCents } from '../lib/money'
 
 /** YYYY-MM shifted by `delta` months. */
 export function shiftMonth(month: string, delta: number): string {
@@ -37,4 +13,17 @@ const monthFormatter = new Intl.DateTimeFormat('es-CO', { timeZone: 'UTC', month
 
 export function formatMonth(month: string): string {
   return monthFormatter.format(new Date(`${month}-01T00:00:00Z`))
+}
+
+/** Short month name ("oct.") for a YYYY-MM value. */
+export function shortMonth(month: string): string {
+  return new Intl.DateTimeFormat('es-CO', { timeZone: 'UTC', month: 'short' }).format(new Date(`${month}-01T00:00:00Z`))
+}
+
+/** Whole percentage (0-100) of `amount` relative to `max`, using integer math. */
+export function percentOf(amount: string, max: string): number {
+  const total = toCents(max)
+  const part = toCents(amount)
+  if (total <= 0n || part <= 0n) return 0
+  return Math.min(100, Number((part * 100n) / total))
 }

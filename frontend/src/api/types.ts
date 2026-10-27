@@ -163,3 +163,54 @@ export interface Me {
   id: string
   email: string | null
 }
+
+export interface CategoryAmount {
+  category_id: string | null
+  name: string
+  color: string | null
+  amount: string
+}
+
+export interface MonthTotals {
+  month: string
+  income: string
+  expenses: string
+  balance: string
+}
+
+export interface Summary {
+  month: string
+  income: string
+  expenses: string
+  balance: string
+  income_by_category: CategoryAmount[]
+  expenses_by_category: CategoryAmount[]
+  trend: MonthTotals[]
+}
+
+export interface WealthAccount {
+  id: string
+  name: string
+  type: AccountType
+  currency: Currency
+  archived: boolean
+  balance: string
+  balance_cop: string
+}
+
+export interface Loan {
+  account_id: string
+  counterparty: string | null
+  amount: string
+}
+
+export interface Wealth {
+  available: string
+  credit_card_debt: string
+  real_money: string
+  receivable_loans: string
+  loans: Loan[]
+  accounts: WealthAccount[]
+  crypto: { value_usd: string | null }
+  rate: { currency: Currency; value: string; date: string } | null
+}

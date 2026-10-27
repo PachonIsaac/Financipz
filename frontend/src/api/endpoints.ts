@@ -11,6 +11,8 @@ import type {
   CategoryUpdate,
   Identifier,
   Me,
+  Summary,
+  Wealth,
   Transaction,
   TransactionCreate,
   TransactionFilters,
@@ -51,8 +53,11 @@ export function createEndpoints(client: ApiClient) {
       request<Transaction>(`/transactions/${id}`, { method: 'PATCH', body }),
     deleteTransaction: (id: string) => request<void>(`/transactions/${id}`, { method: 'DELETE' }),
 
-    // Not available in every backend build; callers must handle a 404.
-    getSummary: (month: string) => request<Record<string, unknown>>('/summary', { query: { month } }),
+    confirmTransaction: (id: string) => request<Transaction>(`/transactions/${id}/confirm`, { method: 'POST' }),
+    discardTransaction: (id: string) => request<Transaction>(`/transactions/${id}/discard`, { method: 'POST' }),
+
+    getSummary: (month: string) => request<Summary>('/summary', { query: { month } }),
+    getWealth: () => request<Wealth>('/wealth'),
   }
 }
 
