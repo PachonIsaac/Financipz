@@ -1,0 +1,22 @@
+# Datos financieros reales: nunca al repositorio
+*.mmbackup
+datos-privados/
+.env
+.env.*
+# The template has placeholders only, so it is safe to track.
+!.env.example
+
+# Documentación de trabajo: solo local, no se publica
+docs/
+.vscode/
+
+# Dependencias y builds (para cuando existan backend y frontend)
+node_modules/
+__pycache__/
+.venv/
+dist/
+.pytest_cache/
+.coverage
+
+# Sistema
+.DS_Store
