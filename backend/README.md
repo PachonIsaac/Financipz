@@ -51,6 +51,19 @@ python -m app.importers.myfinance --backup FILE --mapping mapping.json --since 2
 
 Only the movements from `--since` on are imported. Each account opens with the balance it had the day before, so the final balances equal the ones in the backup; if any does not match, nothing is saved. Running it again does not duplicate anything. The mapping file says which backup account becomes which account (name, type, key, identifiers, categories to rename) and which backup movements were manual balance corrections, which are imported as balance adjustments so they do not count in the cash flow. A movement can also be listed as absorbed: it is not imported, and its effect is folded into the opening balance of its account, so the final balance still matches. A deposit on a credit card has no source account in the backup, so it must be listed as one or the other; otherwise the import refuses to run. It holds personal data: keep it out of the repository.
 
+## Binance (read-only)
+
+Set `ENCRYPTION_KEY` in `.env` first (the template shows how to generate one): credentials are stored encrypted with it, and the API answers `503` if it is missing or invalid.
+
+Only a read-only API key is accepted. The key is checked when it is connected and again at the start of every sync: if it can withdraw, transfer or trade (or has any permission this app does not know), it is refused and the integration is marked as `error`. Restricting the key to your server's IP address is strongly recommended; without it the connection works but reports a warning.
+
+```bash
+python -m app.integrations.binance_connect   # asks for the key and the secret without echoing them
+python -m app.jobs.sync_binance              # stores today's balances and any new spot trades
+```
+
+The same actions are available as `PUT /api/v1/integrations/binance` (connect), `POST /api/v1/integrations/binance/sync`, `DELETE /api/v1/integrations/binance` and `GET /api/v1/integrations` (status, never secrets). The balance snapshot keeps one row per day, account and asset, so running the sync twice in a day updates it. Read the results with `GET /api/v1/crypto/portfolio`, `/crypto/history` and `/crypto/trades`.
+
 ## Notes
 
 - Secrets go only in `backend/.env`, which is gitignored. Never commit real values.
