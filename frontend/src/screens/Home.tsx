@@ -4,6 +4,7 @@ import { ApiError } from '../api/client'
 import { useAccounts, useSummary, useTransactionList, useWealth } from '../api/hooks'
 import type { CategoryAmount } from '../api/types'
 import { Amount } from '../components/Amount'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
 import { Card } from '../components/ui'
@@ -12,7 +13,7 @@ import { ACCOUNT_TYPE_LABELS } from '../features/labels'
 import { formatMonth, percentOf, shiftMonth, shortMonth } from '../features/summary'
 import { TransactionRow } from '../features/transactions/TransactionRow'
 import { formatDate, todayLocal } from '../lib/dates'
-import { formatMoney, fromCents, toCents } from '../lib/money'
+import { formatRate, fromCents, toCents } from '../lib/money'
 
 function reportError(error: unknown) {
   return error instanceof ApiError && error.code === 'missing_fx_rate'
@@ -81,7 +82,7 @@ function WealthCard() {
           ) : null}
           {data.rate ? (
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              TRM {formatMoney(data.rate.value, 'COP', { exact: true })} del {formatDate(data.rate.date)}
+              TRM {formatRate(data.rate.value)} del {formatDate(data.rate.date)}
             </p>
           ) : null}
         </>
@@ -205,8 +206,12 @@ export function HomeScreen() {
     <>
       <PageHeader title="Inicio" />
       <div className="flex flex-col gap-4">
-        <WealthCard />
-        <MonthSummaryCard />
+        <ErrorBoundary label="No se pudo mostrar el dinero real.">
+          <WealthCard />
+        </ErrorBoundary>
+        <ErrorBoundary label="No se pudo mostrar el resumen del mes.">
+          <MonthSummaryCard />
+        </ErrorBoundary>
 
         <Card>
           <h2 className="mb-2 text-base font-semibold">Cuentas</h2>

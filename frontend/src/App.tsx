@@ -5,6 +5,7 @@ import { ApiProvider } from './api/ApiProvider'
 import { ApiError, createApiClient } from './api/client'
 import { createEndpoints } from './api/endpoints'
 import { useAuth } from './auth/AuthProvider'
+import { RouteErrorBoundary } from './components/ErrorBoundary'
 import { AppLayout } from './components/Layout'
 import { ToastProvider } from './components/Toast'
 import { config } from './lib/config'
@@ -33,6 +34,7 @@ export function createQueryClient(): QueryClient {
 /** Routes for a signed-in user. */
 export function AppRoutes() {
   return (
+    <RouteErrorBoundary>
     <Suspense fallback={<div role="status" aria-label="Cargando" className="min-h-dvh" />}>
     <Routes>
       <Route path="/new" element={<NewTransactionScreen />} />
@@ -48,6 +50,7 @@ export function AppRoutes() {
       </Route>
     </Routes>
     </Suspense>
+    </RouteErrorBoundary>
   )
 }
 

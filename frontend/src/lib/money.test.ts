@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMoney, fromCents, isPositive, parseAmountInput, sumCents, toCents } from './money'
+import { formatMoney, formatRate, fromCents, isPositive, parseAmountInput, sumCents, toCents } from './money'
 
 describe('toCents / fromCents', () => {
   it('converts decimal strings to integer cents and back', () => {
@@ -109,5 +109,30 @@ describe('parseAmountInput', () => {
     ['10.000.00', null],
   ])('parses %s as %s', (input, expected) => {
     expect(parseAmountInput(input)).toBe(expected)
+  })
+})
+
+describe('formatRate', () => {
+  it('formats the rates the API really sends, which have four decimals', () => {
+    expect(formatRate('3157.9400')).toBe('$ 3.157,94')
+    expect(formatRate('4000.0000')).toBe('$ 4.000,00')
+    expect(formatRate('4100')).toBe('$ 4.100,00')
+    expect(formatRate('999.5')).toBe('$ 999,50')
+  })
+
+  it('rounds half up to cents', () => {
+    expect(formatRate('3157.9449')).toBe('$ 3.157,94')
+    expect(formatRate('3157.9450')).toBe('$ 3.157,95')
+    expect(formatRate('3157.9951')).toBe('$ 3.158,00')
+  })
+
+  it('rejects what is not a rate', () => {
+    expect(() => formatRate('abc')).toThrow()
+    expect(() => formatRate('-4000.0000')).toThrow()
+    expect(() => formatRate('3157.94001')).toThrow()
+  })
+
+  it('is needed: an amount helper refuses the same value', () => {
+    expect(() => toCents('3157.9400')).toThrow()
   })
 })

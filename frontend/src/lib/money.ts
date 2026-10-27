@@ -27,6 +27,24 @@ export function fromCents(cents: bigint): string {
   return `${negative && abs !== 0n ? '-' : ''}${whole}.${fraction}`
 }
 
+const RATE_PATTERN = /^\d+(\.\d{1,4})?$/
+
+/**
+ * Formats an exchange rate for display. Rates travel with up to four decimals ("3157.9400"), which
+ * money amounts never have, so they cannot go through `toCents`. The result is rounded to cents,
+ * half up, and shown like an amount: "$ 3.157,94".
+ */
+export function formatRate(value: string): string {
+  const text = value.trim()
+  if (!RATE_PATTERN.test(text)) {
+    throw new Error(`Invalid rate: ${value}`)
+  }
+  const [whole = '0', fraction = ''] = text.split('.')
+  const tenThousandths = BigInt(whole) * 10000n + BigInt(fraction.padEnd(4, '0'))
+  const cents = (tenThousandths + 50n) / 100n
+  return formatMoney(fromCents(cents), 'COP', { exact: true })
+}
+
 export function sumCents(values: string[]): bigint {
   return values.reduce((total, value) => total + toCents(value), 0n)
 }

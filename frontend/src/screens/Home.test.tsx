@@ -26,7 +26,8 @@ const wealth: Wealth = {
   loans: [{ account_id: 'l1', counterparty: 'Persona de prueba', amount: '100000.00' }],
   accounts: [],
   crypto: { value_usd: null },
-  rate: { currency: 'USD', value: '4000.00', date: '2026-10-25' },
+  // Four decimals, exactly as the API sends it.
+  rate: { currency: 'USD', value: '3157.9400', date: '2026-10-25' },
 }
 
 function base(overrides = {}) {
@@ -90,5 +91,33 @@ describe('home screen', () => {
     renderWithApp(<HomeScreen />, { api })
     expect((await screen.findAllByText('No hay conexión con el servidor.')).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Reintentar' }).length).toBeGreaterThan(0)
+  })
+})
+
+describe('Home with data shaped like the real API', () => {
+  it('shows the exchange rate with four decimals on the wire', async () => {
+    renderWithApp(<HomeScreen />, { api: base({ getWealth: vi.fn(async () => wealth), getSummary: vi.fn(async () => summary) }), path: '/' })
+
+    expect(await screen.findByText(/TRM \$ 3\.157,94/)).toBeInTheDocument()
+  })
+
+  it('still draws everything when there is no exchange rate yet', async () => {
+    const withoutRate: Wealth = { ...wealth, rate: null }
+    renderWithApp(<HomeScreen />, { api: base({ getWealth: vi.fn(async () => withoutRate), getSummary: vi.fn(async () => summary) }), path: '/' })
+
+    expect(await screen.findByText('Dinero real')).toBeInTheDocument()
+    expect(screen.queryByText(/TRM/)).not.toBeInTheDocument()
+  })
+
+  it('a section that cannot be drawn does not blank the rest of the screen', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const broken: Wealth = { ...wealth, rate: { currency: 'USD', value: 'not-a-rate', date: '2026-10-25' } }
+    renderWithApp(<HomeScreen />, { api: base({ getWealth: vi.fn(async () => broken), getSummary: vi.fn(async () => summary) }), path: '/' })
+
+    expect(await screen.findByText('No se pudo mostrar el dinero real.')).toBeInTheDocument()
+    // The month summary and the accounts are still there.
+    expect(await screen.findByText('Ingresos')).toBeInTheDocument()
+    expect(await screen.findByText('Cuenta de ahorros')).toBeInTheDocument()
+    spy.mockRestore()
   })
 })
