@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, get_current_user
 from app.core.config import Settings, get_settings
-from app.db.session import get_db
+from app.db.session import KEEPALIVE_ARGS, get_db
 from app.integrations import binance
 from app.main import app
 from tests.api.binance_fake import ALLOWED_ENDPOINTS, FakeExchange
@@ -56,7 +56,7 @@ def test_connection() -> Iterator[Connection]:
     assert str(make_url(url).database).endswith("_test"), "Refusing to run tests on a non-test database"
 
     migrate(url)
-    engine = create_engine(url, connect_args={"prepare_threshold": None})
+    engine = create_engine(url, connect_args={"prepare_threshold": None, **KEEPALIVE_ARGS})
     with engine.connect() as connection:
         yield connection
     engine.dispose()

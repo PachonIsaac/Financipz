@@ -10,6 +10,16 @@ from app.core.errors import ApiError
 
 
 CONNECT_TIMEOUT_SECONDS = 5
+# A connection through a pooler can stall half-open (a lost packet): the client then waits for an
+# answer that never comes. Keepalives make the operating system notice a dead connection and fail
+# it, instead of waiting forever. `tcp_user_timeout` (milliseconds) does the same where supported.
+KEEPALIVE_ARGS = {
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
+    "tcp_user_timeout": 60_000,
+}
 
 
 @lru_cache
@@ -20,7 +30,7 @@ def get_engine(database_url: str) -> Engine:
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=0,
-        connect_args={"prepare_threshold": None, "connect_timeout": CONNECT_TIMEOUT_SECONDS},
+        connect_args={"prepare_threshold": None, "connect_timeout": CONNECT_TIMEOUT_SECONDS, **KEEPALIVE_ARGS},
     )
 
 
