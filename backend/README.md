@@ -26,6 +26,12 @@ Health check: `GET http://127.0.0.1:8000/api/v1/health`. The `database` field is
 pytest
 ```
 
+## Authentication
+
+Protected routes require `Authorization: Bearer <access token>`. Tokens are verified with the authentication provider's public keys (ES256 or RS256, no shared secret), checking signature, expiration, issuer and audience. Set `SUPABASE_URL` in `.env`; without it, protected routes answer `503` instead of letting requests through.
+
+`ALLOWED_USER_IDS` optionally restricts the API to specific users. Add `Depends(get_current_user)` (from `app.core.auth`) to any route that needs a user.
+
 ## Database migrations
 
 ```bash

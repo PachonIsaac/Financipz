@@ -15,10 +15,21 @@ class Settings(BaseSettings):
     database_url: str = ""
     supabase_url: str = ""
     allowed_origins: str = "http://localhost:5173"
+    # Comma-separated user IDs (the `sub` claim) allowed to use the API. Empty accepts any user
+    # of the authentication provider, which is fine while public sign-ups are disabled.
+    allowed_user_ids: str = ""
 
     @property
     def origins(self) -> list[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+        return split_csv(self.allowed_origins)
+
+    @property
+    def allowed_users(self) -> set[str]:
+        return set(split_csv(self.allowed_user_ids))
+
+
+def split_csv(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def get_settings() -> Settings:
