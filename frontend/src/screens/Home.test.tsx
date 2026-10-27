@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { Summary, Wealth } from '../api/types'
@@ -119,5 +120,53 @@ describe('Home with data shaped like the real API', () => {
     expect(await screen.findByText('Ingresos')).toBeInTheDocument()
     expect(await screen.findByText('Cuenta de ahorros')).toBeInTheDocument()
     spy.mockRestore()
+  })
+})
+
+describe('refreshing the data', () => {
+  const result = (overrides = {}) => ({
+    fx_rates: { status: 'ok', code: null, message: null },
+    binance: { status: 'ok', code: null, message: null },
+    ran_at: '2026-10-27T15:00:00Z',
+    cached: false,
+    ...overrides,
+  })
+
+  it('reports each source and reloads the money', async () => {
+    const refreshData = vi.fn(async () => result({ binance: { status: 'not_connected', code: 'integration_not_connected', message: 'x' } }))
+    const api = base({ refreshData })
+    renderWithApp(<HomeScreen />, { api })
+    await screen.findByText('Cuenta de ahorros')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actualizar datos' }))
+
+    expect(await screen.findByText('TRM: actualizada.')).toBeInTheDocument()
+    expect(screen.getByText('Binance: no está conectado.')).toBeInTheDocument()
+    await waitFor(() => expect(api.getWealth).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows what failed and says when nothing was needed', async () => {
+    const refreshData = vi.fn(async () =>
+      result({ fx_rates: { status: 'error', code: 'fx_source_unavailable', message: 'No se pudo consultar la TRM.' }, cached: true }),
+    )
+    renderWithApp(<HomeScreen />, { api: base({ refreshData }) })
+    await screen.findByText('Cuenta de ahorros')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actualizar datos' }))
+
+    expect(await screen.findByText('TRM: no se pudo actualizar (No se pudo consultar la TRM.).')).toBeInTheDocument()
+    expect(screen.getByText('Ya estaba al día.')).toBeInTheDocument()
+  })
+
+  it('shows the error when the request itself fails', async () => {
+    const refreshData = vi.fn(async () => {
+      throw new ApiError(0, 'timeout', 'El servidor tardó demasiado en responder. Intenta de nuevo.')
+    })
+    renderWithApp(<HomeScreen />, { api: base({ refreshData }) })
+    await screen.findByText('Cuenta de ahorros')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Actualizar datos' }))
+
+    expect(await screen.findByText('El servidor tardó demasiado en responder. Intenta de nuevo.')).toBeInTheDocument()
   })
 })

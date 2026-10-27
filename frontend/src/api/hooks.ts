@@ -195,3 +195,13 @@ export function useDeleteCategory() {
       ]),
   })
 }
+
+export function useRefreshData() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.refreshData(),
+    // Even a partial failure may have stored new data.
+    onSettled: () => refreshMoney(client),
+  })
+}

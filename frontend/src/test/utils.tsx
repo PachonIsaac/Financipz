@@ -29,6 +29,7 @@ export function fakeApi(overrides: Partial<Endpoints> = {}): Endpoints {
     deleteTransaction: unmocked('deleteTransaction'),
     getSummary: unmocked('getSummary'),
     getWealth: unmocked('getWealth'),
+    refreshData: unmocked('refreshData'),
     confirmTransaction: unmocked('confirmTransaction'),
     discardTransaction: unmocked('discardTransaction'),
   }
@@ -98,4 +99,15 @@ export function transaction(partial: Partial<Transaction> & { id: string }): Tra
     updated_at: '2026-10-26T15:00:00Z',
     ...partial,
   }
+}
+
+/** An in-memory `localStorage`: the one Node provides on its own is unusable in the test environment. */
+export function stubLocalStorage(): void {
+  const data = new Map<string, string>()
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => void data.set(key, value),
+    removeItem: (key: string) => void data.delete(key),
+    clear: () => data.clear(),
+  })
 }

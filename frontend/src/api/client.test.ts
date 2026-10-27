@@ -96,4 +96,21 @@ describe('api client', () => {
     const { client } = setup(new Response('boom', { status: 500 }))
     await expect(client.request('/me')).rejects.toMatchObject({ status: 500, code: 'http_error' })
   })
+
+  it('gives up with a timeout error when the server takes too long', async () => {
+    vi.useFakeTimers()
+    const fetchImpl = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))
+        }),
+    )
+    const client = createApiClient({ baseUrl: 'http://api.test/api/v1', getToken: async () => null, onUnauthorized: vi.fn(), fetchImpl })
+
+    const result = expect(client.request('/me', { timeoutMs: 5_000 })).rejects.toMatchObject({ status: 0, code: 'timeout' })
+    await vi.advanceTimersByTimeAsync(5_000)
+
+    await result
+    vi.useRealTimers()
+  })
 })

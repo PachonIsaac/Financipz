@@ -11,6 +11,7 @@ import type {
   CategoryUpdate,
   Identifier,
   Me,
+  RefreshResult,
   Summary,
   Wealth,
   Transaction,
@@ -58,6 +59,9 @@ export function createEndpoints(client: ApiClient) {
 
     getSummary: (month: string) => request<Summary>('/summary', { query: { month } }),
     getWealth: () => request<Wealth>('/wealth'),
+
+    // Reads the exchange rate and the exchange balances; a sleeping server may need a while.
+    refreshData: () => request<RefreshResult>('/refresh', { method: 'POST', timeoutMs: 90_000 }),
   }
 }
 

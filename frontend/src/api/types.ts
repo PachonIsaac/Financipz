@@ -214,3 +214,17 @@ export interface Wealth {
   crypto: { value_usd: string | null }
   rate: { currency: Currency; value: string; date: string } | null
 }
+
+export interface RefreshStep {
+  status: 'ok' | 'not_connected' | 'error'
+  code: string | null
+  message: string | null
+}
+
+export interface RefreshResult {
+  fx_rates: RefreshStep
+  binance: RefreshStep
+  ran_at: string
+  /** True when the previous result was returned because it was too recent to run again. */
+  cached: boolean
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { ApiError, errorMessage } from '../api/client'
+import type { WarmupState } from '../api/useWarmup'
 import { Button } from './ui'
 
 /** Placeholder rows while data loads. After 3 seconds it says the server is waking up. */
@@ -79,5 +80,26 @@ export function OfflineBanner() {
     <p role="status" className="bg-amber-200 px-4 pb-2 pt-[max(0.5rem,env(safe-area-inset-top))] text-center text-sm text-amber-900">
       Sin conexión. Mostrando los últimos datos cargados.
     </p>
+  )
+}
+
+/** Says the server is waking up, once it has taken a couple of seconds. It never blocks signing in. */
+export function WarmupBanner({ state, onRetry }: { state: WarmupState; onRetry: () => void }) {
+  if (state.status === 'ready') return null
+  if (state.status === 'checking') {
+    if (state.seconds < 2) return null
+    return (
+      <p role="status" className="bg-slate-200 px-4 py-2 text-center text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+        Despertando el servidor… {state.seconds} s
+      </p>
+    )
+  }
+  return (
+    <div role="alert" className="flex items-center justify-center gap-3 bg-amber-200 px-4 py-2 text-sm text-amber-900">
+      <span>No se pudo despertar el servidor.</span>
+      <button type="button" onClick={onRetry} className="min-h-11 font-semibold underline">
+        Reintentar
+      </button>
+    </div>
   )
 }

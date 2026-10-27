@@ -74,8 +74,10 @@ describe('session handling', () => {
     renderApp()
     await screen.findByRole('heading', { name: 'Inicio' })
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    const init = fetchMock.mock.calls[0]?.[1]
-    expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer token-abc')
+    // The first call is the health check that wakes the server, before any data; it needs no token.
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe('http://api.test/api/v1/health')
+    const call = fetchMock.mock.calls.find(([url]) => !String(url).endsWith('/health'))
+    expect((call?.[1]?.headers as Record<string, string>).Authorization).toBe('Bearer token-abc')
   })
 
   it('signs out and shows the expired notice when the API answers 401', async () => {

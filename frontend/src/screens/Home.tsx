@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { useAccounts, useSummary, useTransactionList, useWealth } from '../api/hooks'
-import type { CategoryAmount } from '../api/types'
+import { useAccounts, useRefreshData, useSummary, useTransactionList, useWealth } from '../api/hooks'
+import type { CategoryAmount, RefreshResult, RefreshStep } from '../api/types'
 import { Amount } from '../components/Amount'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
-import { Card } from '../components/ui'
+import { Button, Card } from '../components/ui'
 import { useLookups } from '../features/lookups'
 import { ACCOUNT_TYPE_LABELS } from '../features/labels'
 import { formatMonth, percentOf, shiftMonth, shortMonth } from '../features/summary'
@@ -195,6 +195,35 @@ function MonthSummaryCard() {
   )
 }
 
+function stepText(name: string, step: RefreshStep, done: string): string {
+  if (step.status === 'ok') return `${name}: ${done}.`
+  if (step.status === 'not_connected') return `${name}: no está conectado.`
+  return `${name}: no se pudo actualizar${step.message ? ` (${step.message})` : ''}.`
+}
+
+function RefreshResultText({ result }: { result: RefreshResult }) {
+  return (
+    <ul className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+      <li>{stepText('TRM', result.fx_rates, 'actualizada')}</li>
+      <li>{stepText('Binance', result.binance, 'actualizado')}</li>
+      {result.cached ? <li>Ya estaba al día.</li> : null}
+    </ul>
+  )
+}
+
+function RefreshData() {
+  const refresh = useRefreshData()
+  return (
+    <div>
+      <Button variant="secondary" className="w-full" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+        {refresh.isPending ? 'Actualizando…' : 'Actualizar datos'}
+      </Button>
+      {refresh.data ? <RefreshResultText result={refresh.data} /> : null}
+      {refresh.isError ? <ErrorState error={refresh.error} /> : null}
+    </div>
+  )
+}
+
 export function HomeScreen() {
   const accounts = useAccounts()
   const recent = useTransactionList({})
@@ -206,6 +235,7 @@ export function HomeScreen() {
     <>
       <PageHeader title="Inicio" />
       <div className="flex flex-col gap-4">
+        <RefreshData />
         <ErrorBoundary label="No se pudo mostrar el dinero real.">
           <WealthCard />
         </ErrorBoundary>

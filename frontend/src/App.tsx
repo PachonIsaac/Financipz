@@ -4,9 +4,11 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { ApiProvider } from './api/ApiProvider'
 import { ApiError, createApiClient } from './api/client'
 import { createEndpoints } from './api/endpoints'
+import { useWarmup } from './api/useWarmup'
 import { useAuth } from './auth/AuthProvider'
 import { RouteErrorBoundary } from './components/ErrorBoundary'
 import { AppLayout } from './components/Layout'
+import { WarmupBanner } from './components/states'
 import { ToastProvider } from './components/Toast'
 import { config } from './lib/config'
 
@@ -56,6 +58,7 @@ export function AppRoutes() {
 
 export function App() {
   const auth = useAuth()
+  const warmup = useWarmup(config.apiUrl)
   const [queryClient] = useState(() => createQueryClient())
   const { getToken, handleUnauthorized } = auth
   const api = useMemo(
@@ -75,9 +78,12 @@ export function App() {
   }
   if (auth.status === 'signedOut') {
     return (
-      <Suspense fallback={null}>
-        <LoginScreen />
-      </Suspense>
+      <>
+        <WarmupBanner state={warmup.state} onRetry={warmup.retry} />
+        <Suspense fallback={null}>
+          <LoginScreen />
+        </Suspense>
+      </>
     )
   }
 
@@ -85,6 +91,7 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <ApiProvider api={api}>
         <ToastProvider>
+          <WarmupBanner state={warmup.state} onRetry={warmup.retry} />
           <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <AppRoutes />
           </BrowserRouter>

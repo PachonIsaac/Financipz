@@ -87,7 +87,11 @@ export interface ApiClientOptions {
   getToken: () => Promise<string | null>
   onUnauthorized: () => void
   fetchImpl?: typeof fetch
+  /** Longest wait for an answer, in milliseconds. A sleeping server needs about a minute to wake. */
+  timeoutMs?: number
 }
+
+const DEFAULT_TIMEOUT_MS = 60_000
 
 export type QueryParams = Record<string, string | number | boolean | undefined | null>
 
@@ -95,6 +99,8 @@ export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   body?: unknown
   query?: QueryParams
+  /** Overrides the client's timeout for this request. */
+  timeoutMs?: number
 }
 
 export interface ApiClient {
@@ -141,15 +147,28 @@ export function createApiClient(options: ApiClientOptions): ApiClient {
     if (token) headers.Authorization = `Bearer ${token}`
     if (req.body !== undefined) headers['Content-Type'] = 'application/json'
 
+    const controller = new AbortController()
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, req.timeoutMs ?? options.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+
     let response: Response
     try {
       response = await doFetch(buildUrl(options.baseUrl, path, req.query), {
         method: req.method ?? 'GET',
         headers,
         body: req.body !== undefined ? JSON.stringify(req.body) : undefined,
+        signal: controller.signal,
       })
     } catch {
+      if (timedOut) {
+        throw new ApiError(0, 'timeout', 'El servidor tardó demasiado en responder. Intenta de nuevo.')
+      }
       throw new ApiError(0, 'network_error', 'No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.')
+    } finally {
+      clearTimeout(timer)
     }
 
     if (response.status === 401) {
