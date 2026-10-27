@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { config } from '../lib/config'
 
 export type AuthStatus = 'loading' | 'signedIn' | 'signedOut'
@@ -20,16 +20,20 @@ export interface AuthValue {
 
 export const AuthContext = createContext<AuthValue | null>(null)
 
-let cached: SupabaseClient | null | undefined
+let cached: Promise<SupabaseClient | null> | undefined
 
-function getSupabase(): SupabaseClient | null {
+const isConfigured = () => Boolean(config.supabaseUrl && config.supabaseKey)
+
+/** The auth client is loaded on demand so it stays out of the initial bundle. */
+function loadSupabase(): Promise<SupabaseClient | null> {
   if (cached === undefined) {
-    cached =
-      config.supabaseUrl && config.supabaseKey
-        ? createClient(config.supabaseUrl, config.supabaseKey, {
+    cached = isConfigured()
+      ? import('@supabase/supabase-js').then(({ createClient }) =>
+          createClient(config.supabaseUrl, config.supabaseKey, {
             auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
-          })
-        : null
+          }),
+        )
+      : Promise.resolve(null)
   }
   return cached
 }
@@ -46,74 +50,84 @@ function signInMessage(raw: string): string {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const supabase = getSupabase()
-  const [status, setStatus] = useState<AuthStatus>(supabase ? 'loading' : 'signedOut')
+  const configured = isConfigured()
+  const [status, setStatus] = useState<AuthStatus>(configured ? 'loading' : 'signedOut')
   const [email, setEmail] = useState<string | null>(null)
   const [expired, setExpired] = useState(false)
   const signingOut = useRef(false)
 
   useEffect(() => {
-    if (!supabase) return
-    void supabase.auth.getSession().then(({ data }) => {
+    let unsubscribe: (() => void) | undefined
+    let cancelled = false
+    void loadSupabase().then(async (supabase) => {
+      if (!supabase || cancelled) return
+      const { data } = await supabase.auth.getSession()
+      if (cancelled) return
       setEmail(data.session?.user.email ?? null)
       setStatus(data.session ? 'signedIn' : 'signedOut')
+      const listener = supabase.auth.onAuthStateChange((_event, session) => {
+        setEmail(session?.user.email ?? null)
+        setStatus(session ? 'signedIn' : 'signedOut')
+      })
+      unsubscribe = () => listener.data.subscription.unsubscribe()
     })
-    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setEmail(session?.user.email ?? null)
-      setStatus(session ? 'signedIn' : 'signedOut')
-    })
-    return () => data.subscription.unsubscribe()
-  }, [supabase])
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+  }, [])
 
-  const signIn = useCallback(
-    async (emailValue: string, password: string): Promise<string | null> => {
-      if (!supabase) return 'Falta configurar el inicio de sesión de la aplicación.'
-      try {
-        const { error } = await supabase.auth.signInWithPassword({ email: emailValue, password })
-        if (error) return signInMessage(error.message)
-        setExpired(false)
-        return null
-      } catch (error) {
-        return signInMessage(error instanceof Error ? error.message : '')
-      }
-    },
-    [supabase],
-  )
+  const signIn = useCallback(async (emailValue: string, password: string): Promise<string | null> => {
+    const supabase = await loadSupabase()
+    if (!supabase) return 'Falta configurar el inicio de sesión de la aplicación.'
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: emailValue, password })
+      if (error) return signInMessage(error.message)
+      setExpired(false)
+      return null
+    } catch (error) {
+      return signInMessage(error instanceof Error ? error.message : '')
+    }
+  }, [])
 
   const signOut = useCallback(async () => {
     setExpired(false)
+    const supabase = await loadSupabase()
     if (supabase) await supabase.auth.signOut()
     setStatus('signedOut')
-  }, [supabase])
+  }, [])
 
   const handleUnauthorized = useCallback(() => {
     if (signingOut.current) return
     signingOut.current = true
     setExpired(true)
     setStatus('signedOut')
-    void (supabase?.auth.signOut() ?? Promise.resolve()).finally(() => {
-      signingOut.current = false
-    })
-  }, [supabase])
+    void loadSupabase()
+      .then((supabase) => supabase?.auth.signOut())
+      .finally(() => {
+        signingOut.current = false
+      })
+  }, [])
 
   const getToken = useCallback(async () => {
+    const supabase = await loadSupabase()
     if (!supabase) return null
     const { data } = await supabase.auth.getSession()
     return data.session?.access_token ?? null
-  }, [supabase])
+  }, [])
 
   const value = useMemo<AuthValue>(
     () => ({
       status,
       email,
       expired,
-      configured: supabase !== null,
+      configured,
       signIn,
       signOut,
       handleUnauthorized,
       getToken,
     }),
-    [status, email, expired, supabase, signIn, signOut, handleUnauthorized, getToken],
+    [status, email, expired, configured, signIn, signOut, handleUnauthorized, getToken],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
