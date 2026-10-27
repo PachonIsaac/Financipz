@@ -18,7 +18,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -227,6 +227,8 @@ class Integration(Base):
     # Encrypted with a key that lives in the backend environment, never in the database.
     encrypted_secret: Mapped[bytes | None] = mapped_column(LargeBinary)
     last_synced_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    # Notices about the connection ({"code", "message"} objects): what the user should know, or why it failed.
+    warnings: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
 
 
 class ProcessedEmail(Base):
@@ -273,7 +275,8 @@ class CryptoBalance(Base):
     account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id"))
     asset: Mapped[str] = mapped_column(Text)
     quantity: Mapped[Decimal] = mapped_column(Numeric(30, 12))
-    value_usd: Mapped[Decimal] = mapped_column(MONEY)
+    # Null when the asset could not be priced: "unknown" is different from "worth zero".
+    value_usd: Mapped[Decimal | None] = mapped_column(MONEY)
     date: Mapped[dt.date] = mapped_column(Date)
 
 

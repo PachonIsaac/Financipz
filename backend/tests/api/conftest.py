@@ -1,19 +1,23 @@
 import os
 from collections.abc import Iterator
+from datetime import date
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.core.auth import CurrentUser, get_current_user
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.session import get_db
+from app.integrations import binance
 from app.main import app
+from tests.api.binance_fake import FakeExchange
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 TEST_DATABASE_NAME = "financipz_test"
@@ -88,3 +92,16 @@ def client(connection: Connection) -> Iterator[TestClient]:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(id="test-user", email=None)
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+ENCRYPTION_TEST_KEY = Fernet.generate_key().decode()
+
+
+@pytest.fixture
+def exchange(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> FakeExchange:
+    """A fake exchange behind the Binance client, an encryption key, and a fixed day."""
+    fake = FakeExchange()
+    monkeypatch.setattr(binance, "build_client", fake.client)
+    monkeypatch.setattr("app.services.binance_sync.local_today", lambda: date(2026, 10, 27))
+    app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, encryption_key=ENCRYPTION_TEST_KEY)
+    return fake
