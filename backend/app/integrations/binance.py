@@ -26,8 +26,9 @@ TRADES_PAGE_SIZE = 1000
 EARN_PAGE_SIZE = 100
 MAX_EARN_PAGES = 20
 
-ASSET_PATTERN = re.compile(r"^[A-Z0-9]{1,20}$")
-SYMBOL_PATTERN = re.compile(r"^[A-Z0-9]{2,30}$")
+# ASCII only, and matched as a whole: nothing else may reach a URL or a stored symbol.
+ASSET_PATTERN = re.compile(r"[A-Z0-9]{1,20}", re.ASCII)
+SYMBOL_PATTERN = re.compile(r"[A-Z0-9]{2,30}", re.ASCII)
 
 # Kinds of failure, from the point of view of the caller.
 INVALID_CREDENTIALS = "invalid_credentials"
@@ -73,6 +74,14 @@ class Credentials:
 
 
 @dataclass(frozen=True)
+class WalletRead:
+    """Balances of one wallet, and how many rows were left out because their asset name is not usable."""
+
+    balances: list[tuple[str, Decimal]]
+    skipped: int = 0
+
+
+@dataclass(frozen=True)
 class Trade:
     symbol: str
     trade_id: int
@@ -107,10 +116,17 @@ def _amount(raw: object) -> Decimal:
     return value
 
 
-def _asset(raw: object) -> str:
-    if not isinstance(raw, str) or not ASSET_PATTERN.match(raw):
-        raise _bad()
-    return raw
+def _wallet(rows: list[dict], amount: Callable[[dict], Decimal]) -> WalletRead:
+    """Read balance rows. A row whose asset name is unusable is skipped and counted, never trusted."""
+    balances: list[tuple[str, Decimal]] = []
+    skipped = 0
+    for row in rows:
+        name = row.get("asset")
+        if not isinstance(name, str) or not ASSET_PATTERN.fullmatch(name):
+            skipped += 1
+            continue
+        balances.append((name, amount(row)))
+    return WalletRead(balances, skipped)
 
 
 def _rows(body: object, key: str | None = None) -> list[dict]:
@@ -161,20 +177,22 @@ class BinanceClient:
 
         query_params = dict(params or {})
         headers = {}
-        if signed:
-            query_params["recvWindow"] = RECV_WINDOW_MS
-            query_params["timestamp"] = int(self._clock() * 1000)
-            headers["X-MBX-APIKEY"] = self._credentials.api_key
-        query = urlencode(query_params)
-        if signed:
-            query += "&signature=" + sign(self._credentials.api_secret, query)
-        target = f"{path}?{query}" if query else path
-
         try:
+            if signed:
+                query_params["recvWindow"] = RECV_WINDOW_MS
+                query_params["timestamp"] = int(self._clock() * 1000)
+                headers["X-MBX-APIKEY"] = self._credentials.api_key
+            query = urlencode(query_params)
+            if signed:
+                query += "&signature=" + sign(self._credentials.api_secret, query)
+            target = f"{path}?{query}" if query else path
             response = self._http.request(method, target, headers=headers)
         except httpx.HTTPError:
             # The original error carries the URL, which holds the signature.
             raise BinanceError(UNAVAILABLE) from None
+        except ValueError:
+            # A key or secret that cannot be encoded. The original error would quote it.
+            raise BinanceError(INVALID_CREDENTIALS) from None
         return self._read(response)
 
     @staticmethod
@@ -202,6 +220,9 @@ class BinanceClient:
             raise BinanceError(ACCESS_DENIED)
         if status >= 400:
             raise BinanceError(REJECTED)
+        if not 200 <= status < 300:
+            # Redirects and anything else that is not a success are never data.
+            raise _bad()
         return body
 
     # --- account ---------------------------------------------------------------------------
@@ -213,40 +234,39 @@ class BinanceClient:
             raise _bad()
         return body
 
-    def spot_balances(self) -> list[tuple[str, Decimal]]:
+    def spot_balances(self) -> WalletRead:
         body = self._request("/api/v3/account", {"omitZeroBalances": "true"}, signed=True)
         if not isinstance(body, dict):
             raise _bad()
-        return [
-            (_asset(row.get("asset")), _amount(row.get("free")) + _amount(row.get("locked")))
-            for row in _rows(body, "balances")
-        ]
+        return _wallet(_rows(body, "balances"), lambda row: _amount(row.get("free")) + _amount(row.get("locked")))
 
-    def funding_balances(self) -> list[tuple[str, Decimal]]:
+    def funding_balances(self) -> WalletRead:
         body = self._request("/sapi/v1/asset/get-funding-asset", signed=True, method="POST")
-        return [
-            (
-                _asset(row.get("asset")),
-                _amount(row.get("free")) + _amount(row.get("locked")) + _amount(row.get("freeze", "0")),
-            )
-            for row in _rows(body)
-        ]
+        return _wallet(
+            _rows(body),
+            lambda row: _amount(row.get("free")) + _amount(row.get("locked")) + _amount(row.get("freeze", "0")),
+        )
 
-    def _earn_positions(self, path: str, amount_field: str) -> list[tuple[str, Decimal]]:
+    def _earn_positions(self, path: str, amount_field: str) -> WalletRead:
         positions: list[tuple[str, Decimal]] = []
+        skipped = 0
+        read = 0
         for page in range(1, MAX_EARN_PAGES + 1):
             body = self._request(path, {"current": page, "size": EARN_PAGE_SIZE}, signed=True)
             rows = _rows(body, "rows")
-            positions.extend((_asset(row.get("asset")), _amount(row.get(amount_field))) for row in rows)
+            wallet = _wallet(rows, lambda row: _amount(row.get(amount_field)))
+            positions.extend(wallet.balances)
+            skipped += wallet.skipped
+            read += len(rows)
             total = body.get("total") if isinstance(body, dict) else None
-            if not rows or not isinstance(total, int) or len(positions) >= total:
-                return positions
+            if not rows or not isinstance(total, int) or read >= total:
+                return WalletRead(positions, skipped)
         raise _bad()
 
-    def earn_flexible_balances(self) -> list[tuple[str, Decimal]]:
+    def earn_flexible_balances(self) -> WalletRead:
         return self._earn_positions("/sapi/v1/simple-earn/flexible/position", "totalAmount")
 
-    def earn_locked_balances(self) -> list[tuple[str, Decimal]]:
+    def earn_locked_balances(self) -> WalletRead:
         return self._earn_positions("/sapi/v1/simple-earn/locked/position", "amount")
 
     # --- market ----------------------------------------------------------------------------
@@ -256,7 +276,7 @@ class BinanceClient:
         prices: dict[str, Decimal] = {}
         for row in _rows(self._request("/api/v3/ticker/price")):
             symbol = row.get("symbol")
-            if not isinstance(symbol, str) or not SYMBOL_PATTERN.match(symbol):
+            if not isinstance(symbol, str) or not SYMBOL_PATTERN.fullmatch(symbol):
                 continue
             try:
                 price = _amount(row.get("price"))
@@ -297,7 +317,7 @@ class BinanceClient:
                     quantity=_amount(row.get("qty")),
                     price=price,
                     fee=_amount(row.get("commission", "0")),
-                    fee_asset=_asset(fee_asset) if fee_asset else None,
+                    fee_asset=fee_asset if isinstance(fee_asset, str) and ASSET_PATTERN.fullmatch(fee_asset) else None,
                     executed_at=executed_at,
                 )
             )
