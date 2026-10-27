@@ -19,6 +19,8 @@ def make_hash(**overrides):
         "amount": Decimal("12300.00"),
         "merchant": "Tienda Ejemplo",
         "last_digits": "1234",
+        "kind": NotificationKind.PURCHASE,
+        "currency": Currency.COP,
     }
     values.update(overrides)
     return dedupe_hash(**values)
@@ -60,7 +62,7 @@ def test_hash_is_a_sha256_hex_digest():
 
 def test_hash_follows_the_documented_formula():
     # Pins the formula: changing it would break dedupe of stored movements.
-    payload = "gmail|2026-03-05|12300|TIENDA EJEMPLO|1234|14:25:10"
+    payload = "gmail|purchase|COP|2026-03-05|12300|TIENDA EJEMPLO|1234|14:25:10"
 
     assert make_hash() == hashlib.sha256(payload.encode()).hexdigest()
 
@@ -84,10 +86,19 @@ def test_amount_scale_does_not_matter():
         {"last_digits": "9999"},
         {"last_digits": None},
         {"source": NotificationSource.SMS_UALA},
+        {"kind": NotificationKind.TRANSFER_IN},
+        {"currency": Currency.USD},
     ],
 )
 def test_any_field_change_changes_the_hash(overrides):
     assert make_hash(**overrides) != make_hash()
+
+
+def test_the_same_amount_in_pesos_and_in_dollars_is_not_a_duplicate():
+    pesos = make_hash(amount=Decimal("20"), currency=Currency.COP, has_time=False)
+    dollars = make_hash(amount=Decimal("20"), currency=Currency.USD, has_time=False)
+
+    assert pesos != dollars
 
 
 def test_time_is_ignored_when_the_source_has_no_time():
@@ -136,7 +147,9 @@ class TestHashForParsedNotification:
             occurred_on=date(2026, 3, 5),
         )
 
-        assert dedupe_hash_for(parsed) == make_hash(has_time=False)
+        assert dedupe_hash_for(parsed) == make_hash(
+            has_time=False, kind=NotificationKind.SCHEDULED_BILL, currency=None
+        )
 
     def test_transfer_falls_back_to_target_text(self):
         parsed = ParsedNotification(
@@ -148,7 +161,9 @@ class TestHashForParsedNotification:
             occurred_at=MOMENT,
         )
 
-        assert dedupe_hash_for(parsed) == make_hash(amount=Decimal("5000"), merchant="Maria Ejemplo")
+        assert dedupe_hash_for(parsed) == make_hash(
+            amount=Decimal("5000"), merchant="Maria Ejemplo", kind=NotificationKind.TRANSFER_OUT, currency=None
+        )
 
     def test_ignored_or_dateless_notifications_have_no_hash(self):
         ignored = ParsedNotification(source=NotificationSource.GMAIL, kind=NotificationKind.IGNORED)

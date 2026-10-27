@@ -14,7 +14,13 @@ from app.parsers.models import NotificationKind, NotificationSource, ParsedNotif
 from app.parsers.moments import find_moment
 
 _FLAGS = re.IGNORECASE
+# The text comes from outside. Real notifications are a couple of hundred characters, so only the
+# start is read; together with the bounded patterns below, this keeps matching time small for any
+# input, however hostile.
+MAX_TEXT_LENGTH = 2000
+_MAX_RAW_LENGTH = 10 * MAX_TEXT_LENGTH
 _AMOUNT = r"(?P<amount>(?:COP|USD|\$)\s?\d(?:[\d.,]*\d)?)"
+_NAME = r".{1,120}?"
 # Anchor that closes a form: " el " directly followed by the date or time.
 _ON = r"\s+el\s+(?=\d)"
 _PRODUCT = r"T\.(?:Cred|Credito|Deb)\s*\*+(?P<digits>\d+)"
@@ -38,22 +44,22 @@ def _form(kind: NotificationKind, regex: str, digits_in_tail: bool = False) -> _
 _MOVEMENT_FORMS = (
     _form(
         NotificationKind.PURCHASE,
-        rf"Compraste\s+{_AMOUNT}\s+en\s+(?P<merchant>.+?)(?:\s+con\s+tu\s+{_PRODUCT})?,{_ON}",
+        rf"Compraste\s+{_AMOUNT}\s+en\s+(?P<merchant>{_NAME})(?:\s+con\s+tu\s+{_PRODUCT})?,{_ON}",
         digits_in_tail=True,
     ),
     _form(
         NotificationKind.PAYMENT,
-        rf"Pagaste\s+{_AMOUNT}\s+a\s+(?P<merchant>.+?)\s+desde\s+tu\s+producto\s+(?P<digits>\d+){_ON}",
+        rf"Pagaste\s+{_AMOUNT}\s+a\s+(?P<merchant>{_NAME})\s+desde\s+tu\s+producto\s+(?P<digits>\d+){_ON}",
     ),
     _form(
         NotificationKind.PAYMENT,
-        rf"Bancolombia:\s+.+?\s+pagaste\s+{_AMOUNT}\s+por\s+c[oó]digo\s+QR\s+desde\s+tu\s+cuenta\s+"
+        rf"Bancolombia:\s+{_NAME}\s+pagaste\s+{_AMOUNT}\s+por\s+c[oó]digo\s+QR\s+desde\s+tu\s+cuenta\s+"
         rf"\*{{0,2}}(?P<digits>\d+)\s+a\s+la\s+llave\s+(?P<target>\S+){_ON}",
     ),
     _form(
         NotificationKind.TRANSFER_OUT,
         rf"transferiste\s+{_AMOUNT}\s+a\s+la\s+llave\s+\S+\s+desde\s+tu\s+cuenta\s+"
-        rf"\*{{0,2}}(?P<digits>\d+)\s+a\s+(?P<target>.+?){_ON}",
+        rf"\*{{0,2}}(?P<digits>\d+)\s+a\s+(?P<target>{_NAME}){_ON}",
     ),
     _form(
         NotificationKind.TRANSFER_OUT,
@@ -62,29 +68,31 @@ _MOVEMENT_FORMS = (
     ),
     _form(
         NotificationKind.TRANSFER_IN,
-        rf"Recibiste\s+una\s+transferencia\s+por\s+{_AMOUNT}\s+de\s+(?P<merchant>.+?)\s+en\s+tu\s+cuenta\s+"
+        rf"Recibiste\s+una\s+transferencia\s+por\s+{_AMOUNT}\s+de\s+(?P<merchant>{_NAME})\s+en\s+tu\s+cuenta\s+"
         rf"\*{{0,2}}(?P<digits>\d+),?{_ON}",
     ),
     _form(
         NotificationKind.TRANSFER_IN,
-        rf"recibiste\s+una\s+transferencia\s+de\s+(?P<merchant>.+?)\s+por\s+{_AMOUNT}\s+en\s+tu\s+cuenta\s+"
-        rf"\*{{0,2}}(?P<digits>\d+)\b.*?\bel\s+(?=\d)",
+        rf"recibiste\s+una\s+transferencia\s+de\s+(?P<merchant>{_NAME})\s+por\s+{_AMOUNT}\s+en\s+tu\s+cuenta\s+"
+        rf"\*{{0,2}}(?P<digits>\d+)\b.{{0,80}}?\bel\s+(?=\d)",
     ),
     _form(
         NotificationKind.PAYROLL,
-        rf"Recibiste\s+un\s+pago\s+de\s+N[oó]mina\s+de\s+(?P<merchant>.+?)\s+por\s+{_AMOUNT}\s+"
+        rf"Recibiste\s+un\s+pago\s+de\s+N[oó]mina\s+de\s+(?P<merchant>{_NAME})\s+por\s+{_AMOUNT}\s+"
         rf"en\s+tu\s+cuenta\s+de\s+Ahorros{_ON}",
     ),
     _form(
         NotificationKind.WITHDRAWAL,
-        rf"Retiraste\s+{_AMOUNT}\s+en\s+(?P<merchant>.+?)\s+de\s+tu\s+T\.Deb\s*\*+(?P<digits>\d+){_ON}",
+        rf"Retiraste\s+{_AMOUNT}\s+en\s+(?P<merchant>{_NAME})\s+de\s+tu\s+T\.Deb\s*\*+(?P<digits>\d+){_ON}",
     ),
     _form(
         NotificationKind.SCHEDULED_BILL,
-        rf"Pago\s+Factura\s+Programada\s+(?P<merchant>.+?)\s+\d+\s+por\s+{_AMOUNT}\s+"
+        rf"Pago\s+Factura\s+Programada\s+(?P<merchant>{_NAME})\s+\d+\s+por\s+{_AMOUNT}\s+"
         rf"desde\s+TC\s*\*+(?P<digits>\d+)\.\s*(?=\d)",
     ),
 )
+
+_FAILED_OPERATION = re.compile(r"no\s+fue\s+exitosa", _FLAGS)
 
 # Notifications that are not money movements.
 _IGNORED_PATTERNS = tuple(
@@ -102,9 +110,13 @@ _BANK_NAME = re.compile(r"\bBancolombia\b", _FLAGS)
 
 def parse_bancolombia(text: str) -> ParsedNotification | None:
     """Parse a Bancolombia notification. Returns None when the form is unknown."""
-    body = " ".join(text.split())
+    body = " ".join(text[:_MAX_RAW_LENGTH].split())[:MAX_TEXT_LENGTH]
     if _BANK_NAME.search(body) is None:
         return None
+    if _FAILED_OPERATION.search(body):
+        # "...no fue exitosa" repeats the amount of an operation that did not happen: it must be
+        # decided before any movement form gets a chance to read it as one.
+        return ParsedNotification(source=NotificationSource.GMAIL, kind=NotificationKind.IGNORED)
     for form in _MOVEMENT_FORMS:
         match = form.pattern.search(body)
         if match is None:

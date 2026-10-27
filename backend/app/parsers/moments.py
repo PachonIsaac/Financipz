@@ -6,7 +6,10 @@ from datetime import date, datetime, time
 from app.domain.entities import LOCAL_TIMEZONE
 
 _DATE = re.compile(r"(?P<a>\d{1,4})/(?P<b>\d{1,2})/(?P<c>\d{1,4})")
-_TIME = re.compile(r"(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?")
+_TIME = re.compile(
+    r"(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?(?:\s?(?P<meridiem>[ap])\.?\s?m\b\.?)?",
+    re.IGNORECASE,
+)
 
 # How far past the cue word a date and time are searched for.
 _WINDOW = 45
@@ -60,7 +63,14 @@ def _find_time(window: str) -> time | None:
     match = _TIME.search(window)
     if match is None:
         return None
+    hour = int(match["hour"])
+    meridiem = (match["meridiem"] or "").lower()
+    if meridiem:
+        # 12-hour clock: 12 a. m. is midnight, 12 p. m. is noon, and 1 to 12 are the only valid hours.
+        if not 1 <= hour <= 12:
+            return None
+        hour = hour % 12 + (12 if meridiem == "p" else 0)
     try:
-        return time(int(match["hour"]), int(match["minute"]), int(match["second"] or 0))
+        return time(hour, int(match["minute"]), int(match["second"] or 0))
     except ValueError:
         return None

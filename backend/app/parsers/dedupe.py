@@ -5,11 +5,14 @@ retried request). The hash identifies it so the second attempt is detected.
 
 Formula: SHA-256 over these fields, joined with `|`:
 
-    source | local day | amount | normalized merchant | last digits [| local time]
+    source | kind | currency | local day | amount | normalized merchant | last digits [| local time]
 
-The local time (HH:MM:SS, Colombia) is appended only when the source carries
-it, so two identical purchases on the same day stay distinct. The amount is
-written in plain notation without trailing zeros, so `100` and `100.00` match.
+The kind and the currency keep apart movements that only look alike (a purchase of 20 pesos and
+one of 20 dollars on the same day at the same shop). The local time (HH:MM:SS, Colombia) is
+appended only when the source carries it, so two identical purchases on the same day stay
+distinct. Without a time, two truly identical movements of the same day share a hash: the
+caller must treat a repeated hash as a possible duplicate to review, not drop it silently. The
+amount is written in plain notation without trailing zeros, so `100` and `100.00` match.
 """
 
 import hashlib
@@ -18,7 +21,8 @@ import unicodedata
 from datetime import datetime
 from decimal import Decimal
 
-from app.parsers.models import NotificationSource, ParsedNotification
+from app.domain.entities import Currency
+from app.parsers.models import NotificationKind, NotificationSource, ParsedNotification
 from app.parsers.moments import localize
 
 _SEPARATOR = "|"
@@ -47,11 +51,15 @@ def dedupe_hash(
     amount: Decimal,
     merchant: str | None,
     last_digits: str | None,
+    kind: NotificationKind | str = "",
+    currency: Currency | str | None = None,
 ) -> str:
     """Hex SHA-256 identifying a movement. `moment` is converted to Colombia time."""
     local = localize(moment)
     fields = [
         str(source),
+        str(kind),
+        str(currency or ""),
         local.date().isoformat(),
         _plain_amount(amount),
         normalize_merchant(merchant),
@@ -79,6 +87,8 @@ def dedupe_hash_for(parsed: ParsedNotification) -> str | None:
         amount=parsed.amount,
         merchant=parsed.merchant or parsed.target_text,
         last_digits=parsed.last_digits,
+        kind=parsed.kind,
+        currency=parsed.currency,
     )
 
 
