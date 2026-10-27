@@ -1,0 +1,46 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f6f7f9;
+  color: #0f172a;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #0b1220;
+    color: #e5e7eb;
+  }
+}
+
+/* Inputs below 16px make iOS zoom the page on focus. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
