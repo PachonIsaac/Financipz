@@ -3,6 +3,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.domain.errors import DomainError
+
 HTTP_ERROR_CODES = {
     404: ("not_found", "No se encontró lo que buscas."),
     405: ("method_not_allowed", "Esa acción no está permitida aquí."),
@@ -50,6 +52,13 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     ]
     return error_response(
         ApiError(422, "validation_error", "Revisa los datos enviados.", {"fields": fields})
+    )
+
+
+async def domain_error_handler(request: Request, exc: DomainError) -> JSONResponse:
+    """Safety net: stored data that breaks a domain rule is reported, not turned into a crash."""
+    return error_response(
+        ApiError(409, "inconsistent_data", "Hay datos guardados que no son coherentes. Revisa los movimientos recientes.")
     )
 
 

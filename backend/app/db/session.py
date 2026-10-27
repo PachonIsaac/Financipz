@@ -9,6 +9,9 @@ from app.core.config import Settings, get_settings
 from app.core.errors import ApiError
 
 
+CONNECT_TIMEOUT_SECONDS = 5
+
+
 @lru_cache
 def get_engine(database_url: str) -> Engine:
     # Transaction-mode poolers do not support server-side prepared statements.
@@ -17,7 +20,7 @@ def get_engine(database_url: str) -> Engine:
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=0,
-        connect_args={"prepare_threshold": None},
+        connect_args={"prepare_threshold": None, "connect_timeout": CONNECT_TIMEOUT_SECONDS},
     )
 
 

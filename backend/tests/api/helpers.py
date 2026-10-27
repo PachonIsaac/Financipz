@@ -55,14 +55,17 @@ def add_rate(db: Session, day: date, value: str, currency: str = "USD") -> None:
 
 def insert_transaction(db: Session, account_id: str, *, type: str = "expense", amount: str = "10",
                        status: str = "pending_review", source: str = "gmail",
-                       when: datetime | None = None) -> str:
+                       when: datetime | None = None, currency: str = "COP",
+                       target_account_id: str | None = None, classification: str | None = None) -> str:
     """A movement as an automatic source would leave it, which the API cannot create."""
     row = models.Transaction(
         id=uuid.uuid4(),
         account_id=uuid.UUID(account_id),
+        target_account_id=uuid.UUID(target_account_id) if target_account_id else None,
+        classification=classification,
         type=type,
         amount=D(amount),
-        currency="COP",
+        currency=currency,
         date=when or datetime(2026, 10, 15, 12, 0, tzinfo=LOCAL_TIMEZONE),
         source=source,
         status=status,

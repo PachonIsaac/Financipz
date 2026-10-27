@@ -1,6 +1,7 @@
 import uuid
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
@@ -34,7 +35,7 @@ def create_category(db: Session, data: CategoryCreate) -> models.Category:
         color=data.color,
     )
     db.add(row)
-    db.commit()
+    _commit(db)
     return row
 
 
@@ -51,7 +52,7 @@ def update_category(db: Session, category_id: uuid.UUID, data: CategoryUpdate) -
 
     for field, value in changes.items():
         setattr(row, field, value)
-    db.commit()
+    _commit(db)
     return row
 
 
@@ -90,6 +91,14 @@ def delete_category(db: Session, category_id: uuid.UUID, reassign_to: uuid.UUID 
 
     db.delete(row)
     db.commit()
+
+
+def _commit(db: Session) -> None:
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ApiError(409, "conflict", "Los datos chocan con algo que ya existe.") from None
 
 
 def _check_parent(db: Session, parent_id: uuid.UUID | None, category_type: str, category_id: uuid.UUID | None) -> None:

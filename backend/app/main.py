@@ -10,7 +10,14 @@ from app.api.me import router as me_router
 from app.api.transactions import router as transactions_router
 from app.core.auth import get_current_user
 from app.core.config import get_settings
-from app.core.errors import ApiError, api_error_handler, http_error_handler, validation_error_handler
+from app.core.errors import (
+    ApiError,
+    api_error_handler,
+    domain_error_handler,
+    http_error_handler,
+    validation_error_handler,
+)
+from app.domain.errors import DomainError
 
 settings = get_settings()
 
@@ -18,6 +25,7 @@ app = FastAPI(title=settings.app_name)
 app.add_exception_handler(ApiError, api_error_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(StarletteHTTPException, http_error_handler)
+app.add_exception_handler(DomainError, domain_error_handler)
 
 app.add_middleware(
     CORSMiddleware,

@@ -26,10 +26,16 @@ ATTACKER_KEY = ec.generate_private_key(ec.SECP256R1())
 client = TestClient(app)
 
 
-def configure(allowed_user_ids: str = "", supabase_url: str = BASE_URL, key_for=lambda token: PUBLIC_KEY) -> None:
+def configure(
+    allowed_user_ids: str = USER_ID,
+    allowed_user_emails: str = "",
+    supabase_url: str = BASE_URL,
+    key_for=lambda token: PUBLIC_KEY,
+) -> None:
     app.dependency_overrides[get_settings] = lambda: Settings(
         supabase_url=supabase_url,
         allowed_user_ids=allowed_user_ids,
+        allowed_user_emails=allowed_user_emails,
         _env_file=None,
     )
     app.dependency_overrides[get_verifier] = lambda: JwtVerifier(ISSUER, key_for)
@@ -187,6 +193,36 @@ def test_user_outside_the_allowlist_is_forbidden():
 
     assert response.status_code == 403
     assert error_code(response) == "forbidden"
+
+
+def test_without_any_allowed_user_nobody_gets_in_even_with_a_valid_token():
+    configure(allowed_user_ids="", allowed_user_emails="")
+
+    response = get_me(make_token())
+
+    assert response.status_code == 503
+    assert error_code(response) == "auth_not_configured"
+
+
+def test_a_user_can_be_allowed_by_email_ignoring_case():
+    configure(allowed_user_ids="", allowed_user_emails="USER@Example.test")
+
+    assert get_me(make_token()).status_code == 200
+
+
+def test_a_different_email_is_forbidden():
+    configure(allowed_user_ids="", allowed_user_emails="someone.else@example.test")
+
+    response = get_me(make_token())
+
+    assert response.status_code == 403
+    assert error_code(response) == "forbidden"
+
+
+def test_a_token_without_email_cannot_match_the_email_list():
+    configure(allowed_user_ids="", allowed_user_emails="user@example.test")
+
+    assert get_me(make_token(email=None)).status_code == 403
 
 
 def test_authentication_not_configured_fails_closed():

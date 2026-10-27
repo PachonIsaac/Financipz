@@ -48,6 +48,9 @@ class Draft:
     target_account_id: uuid.UUID | None = None
     target_amount: Decimal | None = None
     classification: Classification | None = None
+    # Amount received and rate already stored on an edited transfer, kept when nothing that
+    # affects the conversion changed.
+    stored_conversion: tuple[Decimal, Decimal] | None = None
 
 
 def get_transaction(db: Session, transaction_id: uuid.UUID) -> models.Transaction:
@@ -81,6 +84,14 @@ def update_transaction(db: Session, transaction_id: uuid.UUID, data: Transaction
     row = get_transaction(db, transaction_id)
     changes = data.changes()
 
+    # Only these edits change how much the destination receives. Anything else (text, category,
+    # date) keeps the stored conversion as it is, even if there is no rate for that day.
+    conversion_inputs = {"amount", "account_id", "target_account_id", "target_amount"}
+    keep_conversion = row.target_amount is not None and not changes.keys() & conversion_inputs
+    moved = ("account_id" in changes and changes["account_id"] != row.account_id) or (
+        "target_account_id" in changes and changes["target_account_id"] != row.target_account_id
+    )
+
     draft = Draft(
         account_id=changes.get("account_id", row.account_id),
         type=TransactionType(row.type),
@@ -96,14 +107,9 @@ def update_transaction(db: Session, transaction_id: uuid.UUID, data: Transaction
             # A new destination account gets a fresh default classification.
             None if "target_account_id" in changes else (Classification(row.classification) if row.classification else None),
         ),
+        stored_conversion=(row.target_amount, row.fx_rate) if keep_conversion else None,
     )
-    values = _prepare(db, draft, check_archived="account_id" in changes and changes["account_id"] != row.account_id)
-
-    # Editing only text fields must not recompute a stored conversion.
-    conversion_inputs = {"amount", "date", "account_id", "target_account_id", "target_amount"}
-    if not changes.keys() & conversion_inputs and values["target_amount"] is not None:
-        values["target_amount"] = row.target_amount
-        values["fx_rate"] = row.fx_rate
+    values = _prepare(db, draft, check_archived=moved, expected_currency=row.currency)
 
     for field, value in values.items():
         setattr(row, field, value)
@@ -127,6 +133,7 @@ def confirm_transaction(db: Session, transaction_id: uuid.UUID) -> models.Transa
     row = get_transaction(db, transaction_id)
     if row.status != TransactionStatus.PENDING_REVIEW:
         raise ApiError(409, "not_pending", "Solo se pueden confirmar movimientos pendientes de revisión.")
+    _check_consistent_to_confirm(db, row)
     row.status = TransactionStatus.CONFIRMED.value
     db.commit()
     return row
@@ -233,11 +240,48 @@ def create_adjustment(db: Session, account_id: uuid.UUID, data: AdjustmentCreate
     return AdjustmentResult(transaction=TransactionOut.model_validate(row), balance=round_money(data.observed_balance))
 
 
-def _prepare(db: Session, draft: Draft, check_archived: bool) -> dict[str, Any]:
-    """Validate a movement and work out the stored fields that depend on the rest."""
+def _check_consistent_to_confirm(db: Session, row: models.Transaction) -> None:
+    """A movement that arrives from an automatic source is only counted once it makes sense.
+
+    Balances are kept per account in the account's own currency, so a confirmed movement in
+    another currency, or a transfer between currencies without the amount received, would
+    break every balance. The user fixes the account (or the amount) first.
+    """
+    source = db.get(models.Account, row.account_id)
+    if row.currency != source.currency:
+        raise ApiError(
+            409,
+            "currency_mismatch",
+            f"El movimiento está en {row.currency} y la cuenta en {source.currency}. "
+            "Cámbialo a una cuenta en esa moneda antes de confirmarlo.",
+        )
+    if row.target_account_id is not None:
+        target = db.get(models.Account, row.target_account_id)
+        if target.currency != source.currency and row.target_amount is None:
+            raise ApiError(
+                409,
+                "target_amount_required",
+                "Las cuentas tienen monedas distintas: escribe el monto que recibe la cuenta de destino.",
+            )
+
+
+def _prepare(
+    db: Session, draft: Draft, check_archived: bool, expected_currency: str | None = None
+) -> dict[str, Any]:
+    """Validate a movement and work out the stored fields that depend on the rest.
+
+    `expected_currency` is the currency of a movement that already exists: it cannot be moved to
+    an account in another currency, because the amount would silently change meaning.
+    """
     source = require(db, models.Account, draft.account_id, "account_not_found", "La cuenta no existe.")
     if check_archived and source.archived:
         raise ApiError(409, "account_archived", "La cuenta está archivada.")
+    if expected_currency is not None and source.currency != expected_currency:
+        raise ApiError(
+            422,
+            "currency_mismatch",
+            f"El movimiento está en {expected_currency} y esa cuenta en {source.currency}.",
+        )
 
     values: dict[str, Any] = {
         "account_id": source.id,
@@ -251,7 +295,7 @@ def _prepare(db: Session, draft: Draft, check_archived: bool) -> dict[str, Any]:
     }
 
     if draft.type is TransactionType.TRANSFER:
-        values.update(_prepare_transfer(db, source, draft))
+        values.update(_prepare_transfer(db, source, draft, check_archived))
     else:
         if draft.target_account_id or draft.target_amount or draft.classification:
             raise ApiError(
@@ -269,7 +313,7 @@ def _prepare(db: Session, draft: Draft, check_archived: bool) -> dict[str, Any]:
     return values
 
 
-def _prepare_transfer(db: Session, source: models.Account, draft: Draft) -> dict[str, Any]:
+def _prepare_transfer(db: Session, source: models.Account, draft: Draft, check_archived: bool) -> dict[str, Any]:
     classification = draft.classification
 
     if draft.target_account_id is None:
@@ -277,6 +321,14 @@ def _prepare_transfer(db: Session, source: models.Account, draft: Draft) -> dict
             raise ApiError(422, "target_amount_not_allowed", "El monto recibido solo aplica con una cuenta de destino.")
         if classification is Classification.LOAN or AccountType(source.type) is AccountType.LOAN:
             raise ApiError(422, "loan_account_mismatch", "Un préstamo necesita la cuenta de destino.")
+        if classification is None:
+            # Money leaves and nothing says what it was: without a class it would vanish from the
+            # flow without anyone noticing.
+            raise ApiError(
+                422,
+                "classification_required",
+                "Una transferencia sin cuenta de destino necesita una clasificación (por ejemplo, gasto).",
+            )
         return {
             "target_account_id": None,
             "target_amount": None,
@@ -289,6 +341,16 @@ def _prepare_transfer(db: Session, source: models.Account, draft: Draft) -> dict
     )
     if target.id == source.id:
         raise ApiError(422, "same_account", "El origen y el destino no pueden ser la misma cuenta.")
+    if check_archived and target.archived:
+        raise ApiError(409, "account_archived", "La cuenta de destino está archivada.")
+    if classification is Classification.EXPENSE:
+        # A transfer counts as an expense only when the money leaves for good. If it lands in
+        # one of the user's accounts it would count twice.
+        raise ApiError(
+            422,
+            "expense_has_no_destination",
+            "Un gasto por transferencia no lleva cuenta de destino: si el dinero llega a una de tus cuentas, no es un gasto.",
+        )
 
     source_type, target_type = AccountType(source.type), AccountType(target.type)
     involves_loan = AccountType.LOAN in (source_type, target_type)
@@ -323,6 +385,8 @@ def _convert(
         if draft.target_amount is not None:
             raise ApiError(422, "target_amount_not_allowed", "Las dos cuentas tienen la misma moneda.")
         return None, None
+    if draft.stored_conversion is not None:
+        return draft.stored_conversion
 
     source_is_cop = source.currency == Currency.COP
     if draft.target_amount is not None:
@@ -384,6 +448,10 @@ def _decode_cursor(cursor: str) -> tuple[datetime, uuid.UUID]:
     try:
         raw = base64.urlsafe_b64decode(cursor.encode()).decode()
         moment, row_id = raw.split("|")
-        return datetime.fromisoformat(moment), uuid.UUID(row_id)
+        when = datetime.fromisoformat(moment)
+        if when.tzinfo is None:
+            # The database would read a date without timezone in its own zone and skip rows.
+            raise ValueError("cursor date has no timezone")
+        return when, uuid.UUID(row_id)
     except (ValueError, binascii.Error, UnicodeDecodeError):
         raise ApiError(422, "invalid_cursor", "El cursor de paginación no es válido.") from None

@@ -110,8 +110,13 @@ def list_identifiers(db: Session, account_id: uuid.UUID) -> list[models.AccountI
 def replace_identifiers(
     db: Session, account_id: uuid.UUID, identifiers: list[IdentifierIn]
 ) -> list[models.AccountIdentifier]:
-    """Replace the whole list. The same last digits cannot point to two different accounts."""
-    get_account(db, account_id)
+    """Replace the whole list.
+
+    The same last digits cannot point to two accounts of the same currency, because a notification
+    could not tell them apart. A card with purchases in pesos and in dollars has one account per
+    currency, and both can carry the same digits.
+    """
+    account = get_account(db, account_id)
 
     digits = [item.digits for item in identifiers]
     if len(set(digits)) != len(digits):
@@ -119,9 +124,12 @@ def replace_identifiers(
 
     taken = list(
         db.scalars(
-            select(models.AccountIdentifier.digits).where(
+            select(models.AccountIdentifier.digits)
+            .join(models.Account, models.Account.id == models.AccountIdentifier.account_id)
+            .where(
                 models.AccountIdentifier.digits.in_(digits),
                 models.AccountIdentifier.account_id != account_id,
+                models.Account.currency == account.currency,
             )
         )
     )

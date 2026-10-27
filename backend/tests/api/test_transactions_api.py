@@ -1,3 +1,4 @@
+import base64
 import uuid
 from datetime import date, datetime
 
@@ -190,9 +191,14 @@ def test_a_loan_cannot_skip_the_loan_account(client):
               "target_account_id": loan["id"], "classification": "expense"},
     )
 
-    for response in (to_cash, no_target, as_expense):
+    for response in (to_cash, no_target):
         assert response.status_code == 422
         assert error_code(response) == "loan_account_mismatch"
+
+    # Sending money to a loan account as an "expense" is refused by the stricter rule first:
+    # an expense never has a destination account.
+    assert as_expense.status_code == 422
+    assert error_code(as_expense) == "expense_has_no_destination"
 
 
 def test_transfer_to_the_same_account_is_rejected(client):
@@ -207,14 +213,131 @@ def test_transfer_to_the_same_account_is_rejected(client):
     assert error_code(response) == "same_account"
 
 
-def test_transfer_without_destination_waits_for_classification(client):
+def test_transfer_without_destination_must_say_what_it_was(client):
     bank = create_account(client, initial=1000)
 
-    movement = create_transaction(client, bank, "transfer", 50)
+    unclassified = client.post(
+        f"{API}/transactions", json={"account_id": bank["id"], "type": "transfer", "amount": "50"}
+    )
+    assert unclassified.status_code == 422
+    assert error_code(unclassified) == "classification_required"
+    assert balance_of(client, bank) == D("1000")
 
-    assert movement["classification"] is None
+    movement = create_transaction(client, bank, "transfer", 50, classification="payment")
+    assert movement["classification"] == "payment"
     assert movement["target_account_id"] is None
     assert balance_of(client, bank) == D("950")
+
+
+def test_a_transfer_to_one_of_my_accounts_is_never_an_expense(client):
+    bank = create_account(client, initial=1000)
+    other = create_account(client, name="Other")
+
+    response = client.post(
+        f"{API}/transactions",
+        json={"account_id": bank["id"], "type": "transfer", "amount": "50",
+              "target_account_id": other["id"], "classification": "expense"},
+    )
+
+    assert response.status_code == 422
+    assert error_code(response) == "expense_has_no_destination"
+
+
+def test_transfers_to_archived_accounts_are_rejected(client):
+    bank = create_account(client, initial=1000)
+    old = create_account(client, name="Old")
+    client.patch(f"{API}/accounts/{old['id']}", json={"archived": True})
+
+    response = client.post(
+        f"{API}/transactions",
+        json={"account_id": bank["id"], "type": "transfer", "amount": "50", "target_account_id": old["id"]},
+    )
+
+    assert response.status_code == 409
+    assert error_code(response) == "account_archived"
+
+
+def test_a_movement_cannot_be_moved_to_an_account_in_another_currency(client):
+    cop = create_account(client, name="Pesos", initial=1000)
+    usd = create_account(client, name="Dollars", currency="USD", initial=1000)
+    movement = create_transaction(client, cop, "expense", 100)
+
+    response = client.patch(f"{API}/transactions/{movement['id']}", json={"account_id": usd["id"]})
+
+    assert response.status_code == 422
+    assert error_code(response) == "currency_mismatch"
+    assert balance_of(client, usd) == D("1000")
+
+
+def test_confirming_a_movement_in_another_currency_than_its_account_is_refused(client, db):
+    cop = create_account(client, name="Pesos", initial=1000)
+    pending = insert_transaction(db, cop["id"], amount="20", currency="USD")
+
+    response = client.post(f"{API}/transactions/{pending}/confirm")
+
+    assert response.status_code == 409
+    assert error_code(response) == "currency_mismatch"
+    # Nothing was counted, and every balance still works.
+    assert balance_of(client, cop) == D("1000")
+    assert client.get(f"{API}/accounts").status_code == 200
+
+
+def test_confirming_a_conversion_without_the_received_amount_is_refused(client, db):
+    bank = create_account(client, initial=1_000_000)
+    card_usd = create_account(client, name="Card USD", type="credit_card", currency="USD")
+    pending = insert_transaction(
+        db, bank["id"], type="transfer", amount="400000", target_account_id=card_usd["id"], classification="payment"
+    )
+
+    response = client.post(f"{API}/transactions/{pending}/confirm")
+
+    assert response.status_code == 409
+    assert error_code(response) == "target_amount_required"
+
+
+def test_editing_a_conversion_made_without_a_rate_keeps_it(client):
+    bank = create_account(client, initial=1_000_000)
+    card_usd = create_account(client, name="Card USD", type="credit_card", currency="USD")
+    payment = create_transaction(
+        client, bank, "transfer", 410_000, target_account_id=card_usd["id"], target_amount="100", date=OCTOBER_15
+    )
+    url = f"{API}/transactions/{payment['id']}"
+
+    note = client.patch(url, json={"note": "Card payment"})
+    moved_date = client.patch(url, json={"date": "2026-10-16T09:00:00-05:00"})
+
+    for response in (note, moved_date):
+        assert response.status_code == 200, response.text
+        assert D(response.json()["target_amount"]) == D("100")
+        assert D(response.json()["fx_rate"]) == D("4100")
+    assert balance_of(client, card_usd) == D("100")
+
+
+def test_changing_the_amount_of_a_conversion_without_a_rate_asks_for_the_received_amount(client):
+    bank = create_account(client, initial=1_000_000)
+    card_usd = create_account(client, name="Card USD", type="credit_card", currency="USD")
+    payment = create_transaction(
+        client, bank, "transfer", 410_000, target_account_id=card_usd["id"], target_amount="100", date=OCTOBER_15
+    )
+    url = f"{API}/transactions/{payment['id']}"
+
+    refused = client.patch(url, json={"amount": "205000"})
+    assert refused.status_code == 422
+    assert error_code(refused) == "fx_rate_unavailable"
+
+    accepted = client.patch(url, json={"amount": "205000", "target_amount": "50"})
+    assert accepted.status_code == 200
+    assert D(accepted.json()["target_amount"]) == D("50")
+    assert D(accepted.json()["fx_rate"]) == D("4100")
+
+
+def test_a_cursor_without_timezone_is_rejected(client):
+    cursor = base64.urlsafe_b64encode(f"2026-10-15T12:00:00|{uuid.uuid4()}".encode()).decode()
+
+    response = client.get(f"{API}/transactions?cursor={cursor}")
+
+    assert response.status_code == 422
+    assert error_code(response) == "invalid_cursor"
 
 
 def test_transfer_classified_as_expense_uses_expense_categories(client):

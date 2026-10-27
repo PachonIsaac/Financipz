@@ -196,6 +196,20 @@ def test_same_digits_cannot_belong_to_two_accounts(client):
     assert response.json()["error"]["details"] == {"digits": ["4444"]}
 
 
+def test_a_card_in_pesos_and_in_dollars_can_share_its_digits(client):
+    pesos = create_account(client, name="Card COP", type="credit_card")
+    dollars = create_account(client, name="Card USD", type="credit_card", currency="USD")
+    digits = {"identifiers": [{"digits": "5555", "type": "credit"}]}
+
+    assert client.put(f"{API}/accounts/{pesos['id']}/identifiers", json=digits).status_code == 200
+    assert client.put(f"{API}/accounts/{dollars['id']}/identifiers", json=digits).status_code == 200
+
+    another_in_pesos = create_account(client, name="Other COP", type="credit_card")
+    clash = client.put(f"{API}/accounts/{another_in_pesos['id']}/identifiers", json=digits)
+    assert clash.status_code == 409
+    assert error_code(clash) == "identifier_taken"
+
+
 @pytest.mark.parametrize(
     "identifiers",
     [
