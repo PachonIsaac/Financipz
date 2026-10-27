@@ -68,8 +68,9 @@ def test_only_confirmed_flow_movements_count(client, db):
     create_transaction(client, bank, "expense", 10_000, date="2026-10-05T09:00:00-05:00")
     create_transaction(client, bank, "transfer", 500_000, target_account_id=savings["id"],
                        date="2026-10-05T09:00:00-05:00")
-    create_transaction(client, bank, "transfer", 7_000, target_account_id=savings["id"],
-                       classification="expense", date="2026-10-05T09:00:00-05:00")
+    # A transfer that leaves for good (no destination account of mine) classified as an expense counts.
+    create_transaction(client, bank, "transfer", 7_000, classification="expense",
+                       date="2026-10-05T09:00:00-05:00")
     insert_transaction(db, bank["id"], amount="99999", status="pending_review")
     insert_transaction(db, bank["id"], amount="88888", status="discarded")
 
