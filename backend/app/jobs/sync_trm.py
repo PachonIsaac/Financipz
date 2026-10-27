@@ -18,7 +18,7 @@ def main(argv: list[str] | None = None) -> int:
         "--backfill-from",
         type=date.fromisoformat,
         metavar="YYYY-MM-DD",
-        help="Also store the rates published since this day.",
+        help="Store the rates published since this day (up to 400 days back).",
     )
     args = parser.parse_args(argv)
 
@@ -29,10 +29,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         with Session(get_engine(url)) as db:
-            if args.backfill_from is not None:
-                count = fx_rates.backfill(db, args.backfill_from)
-                print(f"Stored {count} historical rates")
-            row = fx_rates.sync_current(db)
+            row = fx_rates.sync_rates(db, args.backfill_from)
             print(f"Stored {row.currency} rate {row.value} for {row.date}")
     except ApiError as error:
         print(f"{error.code}: {error.details.get('reason', error.message)}", file=sys.stderr)
