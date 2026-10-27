@@ -6,6 +6,7 @@ the archive is written to disk.
 
 import sqlite3
 import zipfile
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
@@ -14,6 +15,11 @@ from pathlib import Path
 
 DATABASE_MEMBER = "MyFinance.db"
 MAX_DATABASE_BYTES = 200 * 1024 * 1024
+# The SQLite progress handler runs every 1000 virtual machine instructions. Reading a real backup
+# takes a tiny fraction of this; a hostile file that makes a query loop is stopped by it.
+PROGRESS_INTERVAL = 1000
+MAX_PROGRESS_CALLS = 50_000
+MOVEMENT_KINDS = {"expense", "income"}
 
 
 class BackupError(ValueError):
@@ -84,13 +90,39 @@ def read_backup(path: Path) -> Backup:
     connection = sqlite3.connect(":memory:")
     try:
         connection.deserialize(_read_database(path))
+        _limit_work(connection)
+        _check_schema(connection)
         backup = _load(connection)
-    except sqlite3.DatabaseError as error:
-        raise BackupError(f"The backup database cannot be read: {error}") from error
+    except BackupError:
+        raise
+    except (sqlite3.Error, ValueError, KeyError, TypeError, AttributeError, ArithmeticError) as error:
+        # Only the kind of failure is reported, never the content of the (private) backup.
+        raise BackupError(f"The backup cannot be read ({type(error).__name__})") from error
     finally:
         connection.close()
+    _check_links(backup)
     _check_balances(backup)
     return backup
+
+
+def _limit_work(connection: sqlite3.Connection) -> None:
+    calls = 0
+
+    def stop_when_too_long() -> int:
+        nonlocal calls
+        calls += 1
+        return 1 if calls > MAX_PROGRESS_CALLS else 0
+
+    connection.set_progress_handler(stop_when_too_long, PROGRESS_INTERVAL)
+
+
+def _check_schema(connection: sqlite3.Connection) -> None:
+    """A MyFinance database only has tables and indexes. Views or triggers are not expected."""
+    unexpected = connection.execute(
+        "SELECT count(*) FROM sqlite_master WHERE type NOT IN ('table', 'index')"
+    ).fetchone()[0]
+    if unexpected:
+        raise BackupError("The backup database has objects that a MyFinance backup does not have")
 
 
 def _read_database(path: Path) -> bytes:
@@ -100,8 +132,8 @@ def _read_database(path: Path) -> bytes:
             if info.file_size > MAX_DATABASE_BYTES:
                 raise BackupError("The backup database is unexpectedly large")
             return archive.read(info)
-    except (zipfile.BadZipFile, KeyError, OSError) as error:
-        raise BackupError(f"{path.name} is not a MyFinance backup: {error}") from error
+    except (zipfile.BadZipFile, KeyError, OSError, RuntimeError, NotImplementedError, EOFError, zlib.error) as error:
+        raise BackupError(f"{path.name} is not a readable MyFinance backup ({type(error).__name__})") from error
 
 
 def _cents(value: int) -> Decimal:
@@ -142,6 +174,8 @@ def _load(connection: sqlite3.Connection) -> Backup:
     ):
         if uid not in movement_account:
             raise BackupError("A movement has no account")
+        if kind is None or kind.lower() not in MOVEMENT_KINDS:
+            raise BackupError("A movement has an unknown type")
         backup.movements.append(
             BackupMovement(
                 uid=uid,
@@ -177,6 +211,15 @@ def _load(connection: sqlite3.Connection) -> Backup:
             )
         )
     return backup
+
+
+def _check_links(backup: Backup) -> None:
+    """Every movement and transfer must belong to accounts that are in the backup."""
+    known = backup.accounts.keys()
+    if any(m.account_uid not in known for m in backup.movements) or any(
+        t.from_uid not in known or t.to_uid not in known for t in backup.transfers
+    ):
+        raise BackupError("A movement refers to an account that is not in the backup")
 
 
 def _check_balances(backup: Backup) -> None:

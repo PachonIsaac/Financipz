@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import zipfile
 from datetime import date
@@ -10,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.db import models
 from app.domain.entities import LOCAL_TIMEZONE
-from app.importers.myfinance import ImportError_, ImportMapping, run_import
+from app.importers.myfinance import ImportError_, ImportMapping, load_mapping, run_import
 from app.importers.myfinance_backup import BackupError, read_backup
 from app.services.balances import account_balances
 
@@ -344,3 +345,83 @@ def test_a_backup_whose_balances_do_not_add_up_is_rejected(tmp_path):
 
     with pytest.raises(BackupError, match="balances"):
         read_backup(tampered)
+
+
+def rewrite_backup(source: Path, statements: list[str], destination: Path) -> Path:
+    """Copy a test backup after running SQL on its database, to build broken or hostile variants."""
+    database = sqlite3.connect(":memory:")
+    with zipfile.ZipFile(source.with_suffix(".zip")) as archive:
+        database.deserialize(archive.read("MyFinance.db"))
+    for statement in statements:
+        database.execute(statement)
+    database.commit()
+    with zipfile.ZipFile(destination, "w") as archive:
+        archive.writestr("MyFinance.db", database.serialize())
+    return destination
+
+
+@pytest.mark.parametrize(
+    ("statement", "expected"),
+    [
+        ("UPDATE \"transaction\" SET type = 'Weird' WHERE uid = 'mov-3'", "unknown type"),
+        ("UPDATE \"transaction\" SET type = NULL WHERE uid = 'mov-3'", "unknown type"),
+        ("UPDATE \"transaction\" SET date = 'not-a-date' WHERE uid = 'mov-3'", "cannot be read"),
+        ("UPDATE \"transaction\" SET date = NULL WHERE uid = 'mov-3'", "cannot be read"),
+        ("UPDATE \"transaction\" SET amountInAccountCurrency = 'abc' WHERE uid = 'mov-3'", "cannot be read"),
+        ("CREATE VIEW sneaky AS SELECT 1", "objects"),
+        ("CREATE TRIGGER sneaky AFTER INSERT ON account BEGIN SELECT 1; END", "objects"),
+        (
+            "UPDATE sync_link SET otherUid = 'acc-missing' WHERE entityUid = 'mov-3' AND otherType = 'Account'",
+            "not in the backup",
+        ),
+        ("DELETE FROM sync_link WHERE entityUid = 'trf-0' AND otherType = 'ToAccount'", "missing one of its accounts"),
+    ],
+)
+def test_broken_or_hostile_backups_are_rejected_with_a_clear_error(tmp_path, backup_file, statement, expected):
+    broken = rewrite_backup(backup_file, [statement], tmp_path / "broken.mmbackup")
+
+    with pytest.raises(BackupError, match=expected) as error:
+        read_backup(broken)
+
+    # The message says what is wrong, never what the (private) backup contains.
+    assert "mov-3" not in str(error.value)
+    assert "Main" not in str(error.value)
+
+
+def test_a_zip_without_the_database_is_rejected(tmp_path):
+    empty = tmp_path / "empty.mmbackup"
+    with zipfile.ZipFile(empty, "w") as archive:
+        archive.writestr("something_else.txt", "hello")
+
+    with pytest.raises(BackupError, match="not a readable MyFinance backup"):
+        read_backup(empty)
+
+
+def test_the_import_refuses_to_run_outside_a_savepoint(connection, backup_file):
+    # A plain session could not undo the accounts it creates if the balances do not match.
+    with Session(bind=connection, expire_on_commit=False) as plain:
+        with pytest.raises(ImportError_, match="savepoint"):
+            run_import(plain, read_backup(backup_file), mapping(), SINCE)
+
+
+def test_mapping_errors_say_where_the_problem_is_but_never_repeat_its_values(tmp_path):
+    path = tmp_path / "mapping.json"
+    path.write_text(
+        json.dumps({"accounts": {"A": {"name": "N", "type": "bank", "key": "SECRETKEY", "bogus": "SECRETVALUE"}}})
+    )
+
+    with pytest.raises(ImportError_) as error:
+        load_mapping(path)
+
+    assert "bogus" in str(error.value)
+    assert "SECRET" not in str(error.value)
+
+
+def test_an_unreadable_mapping_file_is_reported_without_its_content(tmp_path):
+    path = tmp_path / "mapping.json"
+    path.write_text("{ this is not json SECRETTEXT")
+
+    with pytest.raises(ImportError_) as error:
+        load_mapping(path)
+
+    assert "SECRETTEXT" not in str(error.value)

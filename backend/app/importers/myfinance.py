@@ -88,8 +88,12 @@ class ImportReport:
 def load_mapping(path: Path) -> ImportMapping:
     try:
         return ImportMapping.model_validate(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError, ValidationError) as error:
-        raise ImportError_(f"The mapping file is not valid: {error}") from error
+    except ValidationError as error:
+        # Where the problem is and what kind, never the values: the file holds personal data.
+        problems = "; ".join(f"{'.'.join(str(part) for part in e['loc'])}: {e['type']}" for e in error.errors())
+        raise ImportError_(f"The mapping file is not valid ({problems})") from error
+    except (OSError, ValueError) as error:
+        raise ImportError_(f"The mapping file cannot be read ({type(error).__name__})") from error
 
 
 def run_import(db: Session, backup: Backup, mapping: ImportMapping, since: date) -> ImportReport:
@@ -98,6 +102,12 @@ def run_import(db: Session, backup: Backup, mapping: ImportMapping, since: date)
     If the balances do not match the backup, `ImportError_` is raised before anything is committed
     by this function. The caller owns the outer transaction and decides whether to keep it.
     """
+    # Accounts are created through services that commit as they go. Inside a savepoint those commits
+    # can be undone as a whole if the balances do not match; on a plain session they could not.
+    # (The connection tells whether a savepoint is active; the session's own flag does not.)
+    if not db.connection().in_nested_transaction():
+        raise ImportError_("The import must run in a session inside a savepoint, so it can be undone as a whole")
+
     report = ImportReport()
     effects = backup.effects(since)
 
@@ -240,6 +250,9 @@ def _ensure_account(
             replace_identifiers(db, created.id, wanted.identifiers)
     except ApiError as error:
         raise ImportError_(f"Cannot create account '{wanted.name}': {error.message}") from error
+    except ValidationError as error:
+        fields = ", ".join(sorted({str(e["loc"][0]) for e in error.errors()}))
+        raise ImportError_(f"Cannot create account '{wanted.name}': invalid {fields}") from error
     report.accounts_created.append(wanted.name)
     return db.get(models.Account, created.id)
 
