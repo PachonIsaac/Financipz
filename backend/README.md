@@ -49,7 +49,7 @@ python -m app.importers.myfinance --backup FILE --mapping mapping.json --since 2
 python -m app.importers.myfinance --backup FILE --mapping mapping.json --since 2026-09-01 --apply  # saves
 ```
 
-Only the movements from `--since` on are imported. Each account opens with the balance it had the day before, so the final balances equal the ones in the backup; if any does not match, nothing is saved. Running it again does not duplicate anything. The mapping file says which backup account becomes which account (name, type, key, identifiers, categories to rename) and which backup movements were manual balance corrections, which are imported as balance adjustments so they do not count in the cash flow. It holds personal data: keep it out of the repository.
+Only the movements from `--since` on are imported. Each account opens with the balance it had the day before, so the final balances equal the ones in the backup; if any does not match, nothing is saved. Running it again does not duplicate anything. The mapping file says which backup account becomes which account (name, type, key, identifiers, categories to rename) and which backup movements were manual balance corrections, which are imported as balance adjustments so they do not count in the cash flow. A movement can also be listed as absorbed: it is not imported, and its effect is folded into the opening balance of its account, so the final balance still matches. A deposit on a credit card has no source account in the backup, so it must be listed as one or the other; otherwise the import refuses to run. It holds personal data: keep it out of the repository.
 
 ## Notes
 

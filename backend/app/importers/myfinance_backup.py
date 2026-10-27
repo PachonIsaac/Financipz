@@ -72,10 +72,15 @@ class Backup:
     movements: list[BackupMovement] = field(default_factory=list)
     transfers: list[BackupTransfer] = field(default_factory=list)
 
-    def effects(self, since: date | None = None) -> dict[str, Decimal]:
-        """Signed effect of the movements on each account, from `since` on (everything if None)."""
+    def effects(self, since: date | None = None, exclude: frozenset[str] | set[str] = frozenset()) -> dict[str, Decimal]:
+        """Signed effect of the movements on each account, from `since` on (everything if None).
+
+        Movements whose id is in `exclude` are left out of the sum.
+        """
         totals: dict[str, Decimal] = defaultdict(Decimal)
         for movement in self.movements:
+            if movement.uid in exclude:
+                continue
             if since is None or movement.day >= since:
                 sign = 1 if movement.kind == "income" else -1
                 totals[movement.account_uid] += sign * movement.amount

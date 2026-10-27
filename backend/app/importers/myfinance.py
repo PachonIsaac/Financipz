@@ -35,7 +35,6 @@ from app.services.accounts import create_account, replace_identifiers
 from app.services.balances import account_balances
 
 SOURCE = "myfinance_import"
-UNKNOWN_ORIGIN_NOTE = "Pago de tarjeta sin origen conocido"
 ADJUSTMENT_NOTE = "Ajuste de saldo importado"
 
 
@@ -63,11 +62,13 @@ class ImportMapping(BaseModel):
     categories: dict[str, str] = {}
     # Categories to create even if no imported movement uses them.
     extra_categories: list[dict[str, str]] = []
-    # Account that is the source of card payments whose real origin is unknown.
-    unknown_origin_name: str = "Origen no identificado"
     # Ids of backup movements that were manual balance corrections. They are imported as balance
     # adjustments, which do not count in the cash flow.
     adjustment_movements: list[str] = []
+    # Ids of backup movements that are not imported at all: their effect is folded into the opening
+    # balance of their account, so the final balance still equals the backup's without leaving a
+    # movement behind. For corrections that only made sense in the old app.
+    absorbed_movements: list[str] = []
 
 
 @dataclass
@@ -77,7 +78,7 @@ class ImportReport:
     categories_created: int = 0
     movements_imported: int = 0
     movements_skipped: int = 0
-    card_payments_without_origin: int = 0
+    movements_absorbed: int = 0
     adjustments_imported: int = 0
     transfers_imported: int = 0
     transfers_skipped: int = 0
@@ -109,7 +110,9 @@ def run_import(db: Session, backup: Backup, mapping: ImportMapping, since: date)
         raise ImportError_("The import must run in a session inside a savepoint, so it can be undone as a whole")
 
     report = ImportReport()
-    effects = backup.effects(since)
+    absorbed_ids = frozenset(mapping.absorbed_movements)
+    adjustment_ids = set(mapping.adjustment_movements)
+    effects = backup.effects(since, exclude=absorbed_ids)
 
     in_window = {m.account_uid for m in backup.movements if m.day >= since}
     in_window |= {t.from_uid for t in backup.transfers if t.day >= since}
@@ -124,15 +127,20 @@ def run_import(db: Session, backup: Backup, mapping: ImportMapping, since: date)
     if missing:
         raise ImportError_(f"These backup accounts have no mapping: {', '.join(missing)}")
 
+    _refuse_undecided_card_deposits(backup, mapping, since, absorbed_ids, adjustment_ids)
+
     rows = {account.uid: _ensure_account(db, account, mapping, effects, report) for account in included}
     types = {uid: AccountType(row.type) for uid, row in rows.items()}
 
-    origin = None
-    adjustment_ids = set(mapping.adjustment_movements)
     categories = _CategoryResolver(db, backup, mapping, report)
     imported = set(db.scalars(select(models.Transaction.source_id).where(models.Transaction.source == SOURCE)))
 
     for movement in sorted((m for m in backup.movements if m.day >= since), key=lambda m: m.day):
+        if movement.uid in absorbed_ids:
+            if movement.uid in imported:
+                raise ImportError_("A movement marked as absorbed was already imported: remove it first")
+            report.movements_absorbed += 1
+            continue
         if movement.uid in imported:
             report.movements_skipped += 1
             continue
@@ -159,20 +167,6 @@ def run_import(db: Session, backup: Backup, mapping: ImportMapping, since: date)
                 )
             )
             report.adjustments_imported += 1
-        elif movement.kind == "income" and types[movement.account_uid] is AccountType.CREDIT_CARD:
-            # A deposit on a card is a payment. The account it came from is not in the backup.
-            origin = origin or _ensure_unknown_origin(db, mapping)
-            db.add(
-                models.Transaction(
-                    **common,
-                    account_id=origin.id,
-                    target_account_id=account.id,
-                    type="transfer",
-                    classification="payment",
-                    note=_join_notes(UNKNOWN_ORIGIN_NOTE, movement.note),
-                )
-            )
-            report.card_payments_without_origin += 1
         else:
             db.add(
                 models.Transaction(
@@ -257,26 +251,30 @@ def _ensure_account(
     return db.get(models.Account, created.id)
 
 
-def _ensure_unknown_origin(db: Session, mapping: ImportMapping) -> models.Account:
-    existing = db.scalar(
-        select(models.Account).where(
-            models.Account.type == AccountType.SYSTEM.value,
-            models.Account.name == mapping.unknown_origin_name,
+def _refuse_undecided_card_deposits(
+    backup: Backup,
+    mapping: ImportMapping,
+    since: date,
+    absorbed_ids: frozenset[str],
+    adjustment_ids: set[str],
+) -> None:
+    """A deposit on a credit card has no source account in the backup, so it cannot become a payment.
+
+    It has to be decided in the mapping: a balance adjustment, or absorbed into the opening balance.
+    Guessing an origin would invent an account that is always in the red.
+    """
+    undecided = 0
+    for movement in backup.movements:
+        if movement.day < since or movement.kind != "income" or movement.uid in absorbed_ids | adjustment_ids:
+            continue
+        mapped = mapping.accounts.get(backup.accounts[movement.account_uid].title)
+        if mapped is not None and mapped.type is AccountType.CREDIT_CARD:
+            undecided += 1
+    if undecided:
+        raise ImportError_(
+            f"{undecided} deposit(s) into credit cards have no known origin: list their ids under "
+            "adjustment_movements or absorbed_movements in the mapping"
         )
-    )
-    if existing is not None:
-        return existing
-    row = models.Account(
-        id=uuid.uuid4(),
-        name=mapping.unknown_origin_name,
-        type=AccountType.SYSTEM.value,
-        currency="COP",
-        initial_balance=Decimal(0),
-        archived=False,
-    )
-    db.add(row)
-    db.flush()
-    return row
 
 
 class _CategoryResolver:
@@ -400,7 +398,7 @@ def _print_report(report: ImportReport, applied: bool) -> None:
     print(f"accounts created: {len(report.accounts_created)}, reused: {len(report.accounts_reused)}")
     print(f"categories created: {report.categories_created}")
     print(f"movements imported: {report.movements_imported}, already there: {report.movements_skipped}")
-    print(f"card payments with unknown origin: {report.card_payments_without_origin}")
+    print(f"movements absorbed into opening balances: {report.movements_absorbed}")
     print(f"balance adjustments: {report.adjustments_imported}")
     print(f"transfers imported: {report.transfers_imported}, already there: {report.transfers_skipped}")
     for warning in sorted(set(report.warnings)):

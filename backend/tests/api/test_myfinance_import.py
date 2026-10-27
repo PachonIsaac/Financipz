@@ -86,7 +86,7 @@ MOVEMENTS = [
     ("Main", "Expense", 5_000, "2026-09-04", None, False),  # no category
     ("Main", "Income", 1_234, "2026-09-05", "Interest", False),
     ("Card", "Expense", 300_000, "2026-09-06", "Fun", False),
-    ("Card", "Income", 120_000, "2026-09-10", None, False),  # a payment of the card, origin unknown
+    ("Card", "Income", 120_000, "2026-09-10", None, False),  # a deposit on a card with no source account
     ("Wallet", "Expense", 20_000, "2026-09-11", "Paycheck", False),  # expense with an income category
     ("Cash", "Expense", 9_999, "2026-09-12", "Food", True),  # removed in the old app
     ("Closed card", "Income", 50_000, "2026-09-13", None, False),  # the closed card is paid off
@@ -113,6 +113,8 @@ MAPPING = {
     },
     "categories": {"Paycheck": "Payroll", "Interest": "Yields"},
     "extra_categories": [{"name": "Card bonus", "type": "income"}],
+    # The two deposits on cards were corrections that only made sense in the old app.
+    "absorbed_movements": ["mov-8", "mov-11"],
 }
 
 
@@ -166,8 +168,9 @@ def test_accounts_open_with_the_balance_of_the_day_before(db, backup_file):
 
     # Main: +1,000,000 (August) - 1,000 (transfer on Aug 30) before the window.
     assert account_named(db, "Main account").initial_balance == D("999000.00")
-    # Card: -100,000 (August purchase).
-    assert account_named(db, "Card").initial_balance == D("-100000.00")
+    # Card: -100,000 (August purchase), plus the 120,000 deposit of Sep 10 that is absorbed into the
+    # opening balance instead of being imported as a movement.
+    assert account_named(db, "Card").initial_balance == D("20000.00")
     assert account_named(db, "Wallet").initial_balance == D("0.00")
 
 
@@ -189,24 +192,56 @@ def test_key_identifiers_and_archive_come_from_the_mapping(db, backup_file):
     assert account_named(db, "Main account").archived is False
 
 
-def test_card_deposits_become_payments_from_an_unknown_origin(db, backup_file):
-    report = run_import(db, read_backup(backup_file), mapping(), SINCE)
+def test_absorbed_movements_are_not_imported_but_their_effect_stays_in_the_opening_balance(db, backup_file):
+    backup = read_backup(backup_file)
 
-    origin = db.scalar(select(models.Account).where(models.Account.type == "system"))
-    assert origin.name == "Origen no identificado"
-    assert report.card_payments_without_origin == 2  # the open card and the closed one
+    report = run_import(db, backup, mapping(), SINCE)
+
+    imported = set(db.scalars(select(models.Transaction.source_id).where(models.Transaction.source == "myfinance_import")))
+    assert not imported & {"mov-8", "mov-11"}
+    assert report.movements_absorbed == 2
+    # Nothing was invented to hold them: no account of an unknown origin.
+    assert db.scalar(select(models.Account).where(models.Account.type == "system")) is None
+    # The final balances still equal the backup's.
+    assert all(expected == actual for _, expected, actual in report.balances)
+    stored = {account.title: account.balance for account in backup.accounts.values()}
+    assert account_balances(db)[account_named(db, "Card").id] == stored["Card"]
+    assert account_balances(db)[account_named(db, "Closed card").id] == stored["Closed card"]
+
+
+def test_a_deposit_on_a_card_without_a_decision_is_refused_before_anything_is_created(db, backup_file):
+    undecided = ImportMapping.model_validate({**MAPPING, "absorbed_movements": []})
+
+    with pytest.raises(ImportError_, match="2 deposit"):
+        run_import(db, read_backup(backup_file), undecided, SINCE)
+
+    assert account_named(db, "Card") is None
+
+
+def test_card_deposits_can_be_marked_as_balance_adjustments_instead(db, backup_file):
+    as_adjustments = ImportMapping.model_validate(
+        {**MAPPING, "absorbed_movements": [], "adjustment_movements": ["mov-8", "mov-11"]}
+    )
+
+    report = run_import(db, read_backup(backup_file), as_adjustments, SINCE)
 
     card = account_named(db, "Card")
-    payment = db.scalar(
-        select(models.Transaction).where(
-            models.Transaction.account_id == origin.id, models.Transaction.target_account_id == card.id
-        )
+    deposit = db.scalar(select(models.Transaction).where(models.Transaction.source_id == "mov-8"))
+    assert (deposit.type, deposit.account_id, deposit.amount) == ("adjustment_in", card.id, D("120000.00"))
+    assert report.adjustments_imported == 2
+    assert card.initial_balance == D("-100000.00")
+    assert all(expected == actual for _, expected, actual in report.balances)
+
+
+def test_a_movement_cannot_be_absorbed_after_it_was_imported(db, backup_file):
+    backup = read_backup(backup_file)
+    as_adjustments = ImportMapping.model_validate(
+        {**MAPPING, "absorbed_movements": [], "adjustment_movements": ["mov-8", "mov-11"]}
     )
-    assert payment.type == "transfer"
-    assert payment.classification == "payment"
-    assert payment.amount == D("120000.00")
-    assert payment.status == "confirmed"
-    assert "origen" in payment.note.lower()
+    run_import(db, backup, as_adjustments, SINCE)
+
+    with pytest.raises(ImportError_, match="already imported"):
+        run_import(db, backup, mapping(), SINCE)
 
 
 def test_transfers_are_classified_by_their_destination(db, backup_file):
@@ -243,7 +278,7 @@ def test_removed_movements_and_movements_before_the_window_are_left_out(db, back
     imported = set(db.scalars(select(models.Transaction.source_id).where(models.Transaction.source == "myfinance_import")))
     assert "mov-10" not in imported  # removed
     assert not imported & {"mov-0", "mov-1", "mov-2", "trf-3"}  # before the cutoff
-    assert report.movements_imported == 8
+    assert report.movements_imported == 6
     assert report.transfers_imported == 3
 
 
@@ -268,12 +303,10 @@ def test_everything_is_saved_not_only_the_accounts(connection, backup_file):
             select(func.count()).select_from(models.Transaction).where(models.Transaction.source == "myfinance_import")
         )
         categories = fresh.scalar(select(func.count()).select_from(models.Category))
-        origin = fresh.scalar(select(models.Account).where(models.Account.type == "system"))
         archived = fresh.scalar(select(models.Account.archived).where(models.Account.name == "Closed card"))
 
-    assert imported == 11  # 8 movements, 3 transfers
+    assert imported == 9  # 6 movements, 3 transfers (2 deposits are absorbed)
     assert categories >= 5
-    assert origin is not None
     assert archived is True
 
 
@@ -301,7 +334,7 @@ def test_running_the_import_twice_changes_nothing(db, backup_file):
     second = run_import(db, backup, mapping(), SINCE)
 
     assert second.movements_imported == 0 and second.transfers_imported == 0
-    assert second.movements_skipped == 8 and second.transfers_skipped == 3
+    assert second.movements_skipped == 6 and second.transfers_skipped == 3
     assert second.accounts_created == []
     assert len(list(db.scalars(select(models.Transaction.id)))) == count
 
