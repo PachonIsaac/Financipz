@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.core import oauth_state
 from app.core.config import Settings, get_settings
+from app.domain.entities import LOCAL_TIMEZONE
 from app.core.crypto import decrypt_json
 from app.db import models
 from app.integrations import gmail
@@ -151,12 +152,21 @@ def test_reading_the_mail_stores_pending_movements_and_remembers_each_message(cl
     assert again["processed"] == 0 and len(list(db.scalars(select(models.Transaction)))) == 2
 
 
-def test_the_first_read_goes_back_a_month_and_the_next_one_starts_a_day_before_the_last(client, db, connected):
+def test_by_default_the_first_read_starts_today_so_no_old_backlog_is_pulled_in(client, db, connected):
+    client.post(f"{API}/integrations/gmail/sync")
+
+    start = int(connected.queries()[0].rsplit("after:", 1)[1])
+    midnight = datetime.now(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0)
+    assert start == int(midnight.timestamp())
+
+
+def test_the_first_read_can_go_back_some_days_and_the_next_one_starts_a_day_before_the_last(client, db, connected):
+    app.dependency_overrides[get_settings] = lambda: configured(gmail_first_sync_days=30)
     client.post(f"{API}/integrations/gmail/sync")
     first = connected.queries()[0]
     assert "from:(alertasynotificaciones@ayn.notificacionesbancolombia.com)" in first
-    month_ago = int((datetime.now(UTC) - timedelta(days=30)).timestamp())
-    assert abs(int(first.rsplit("after:", 1)[1]) - month_ago) < 120
+    month_ago = int((datetime.now(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=30)).timestamp())
+    assert int(first.rsplit("after:", 1)[1]) == month_ago
 
     row = integrations.get_row(db, "gmail")
     synced = int((row.last_synced_at - timedelta(days=1)).timestamp())

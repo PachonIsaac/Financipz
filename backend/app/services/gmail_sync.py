@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.core.crypto import decrypt_json, encrypt_json
 from app.core.errors import ApiError
 from app.db import models
+from app.domain.entities import LOCAL_TIMEZONE
 from app.integrations import gmail
 from app.integrations.gmail import GmailError
 from app.parsers.bancolombia import parse_bancolombia
@@ -132,6 +133,12 @@ def _connected(db: Session) -> models.Integration:
     return row
 
 
+def _first_read_start(settings: Settings, now: datetime) -> datetime:
+    """The start of today in Colombia, minus the days asked for."""
+    today = now.astimezone(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0)
+    return today - timedelta(days=settings.gmail_first_sync_days)
+
+
 def _query(settings: Settings, since: datetime) -> str:
     senders = " OR ".join(settings.senders)
     return f"from:({senders}) after:{int(since.timestamp())}"
@@ -161,7 +168,7 @@ def _sync(db: Session, settings: Settings) -> GmailSyncResult:
     _configured(settings)
     row = _connected(db)
     now = datetime.now(UTC)
-    since = (row.last_synced_at - OVERLAP) if row.last_synced_at else now - timedelta(days=settings.gmail_first_sync_days)
+    since = (row.last_synced_at - OVERLAP) if row.last_synced_at else _first_read_start(settings, now)
 
     try:
         refresh_token = decrypt_json(settings.encryption_key, row.encrypted_secret)["refresh_token"]
