@@ -29,7 +29,7 @@ describe('quick add screen', () => {
 
     const amount = await screen.findByLabelText(/^Monto/)
     await user.type(amount, '45.000')
-    await user.selectOptions(screen.getByLabelText('Categoría'), 'cat-1')
+    await user.click(screen.getByRole('radio', { name: 'Mercado' }))
     await user.type(screen.getByLabelText('Comercio (opcional)'), 'Tienda')
     await user.click(screen.getByRole('button', { name: 'Guardar' }))
 

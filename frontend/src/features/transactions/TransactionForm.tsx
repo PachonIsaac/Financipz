@@ -4,6 +4,7 @@ import type { Account, Category, ManualTransactionType, TransactionCreate } from
 import { Button, SelectField, TextAreaField, TextField } from '../../components/ui'
 import { FormError } from '../../components/states'
 import { ACCOUNT_TYPE_LABELS, TRANSACTION_TYPE_LABELS } from '../labels'
+import { CategoryPicker } from './CategoryPicker'
 import { categoryOptions } from './display'
 import {
   mapApiField,
@@ -74,7 +75,7 @@ export function TransactionForm({
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-      <div role="group" aria-label="Tipo de movimiento" className="grid grid-cols-3 gap-2">
+      <div role="group" aria-label="Tipo de movimiento" className="grid grid-cols-3 gap-1 rounded-2xl border border-slate-800 bg-slate-900 p-1">
         {TYPES.map((type) => (
           <button
             key={type}
@@ -82,10 +83,8 @@ export function TransactionForm({
             aria-pressed={values.type === type}
             disabled={lockType && values.type !== type}
             onClick={() => setValues((c) => ({ ...c, type, categoryId: '', targetAccountId: '' }))}
-            className={`min-h-11 rounded-xl text-base font-medium disabled:opacity-40 ${
-              values.type === type
-                ? 'bg-emerald-500 text-slate-950'
-                : 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
+            className={`min-h-11 rounded-xl text-[15px] disabled:opacity-40 ${
+              values.type === type ? 'bg-emerald-500 font-semibold text-slate-950' : 'text-slate-400'
             }`}
           >
             {TRANSACTION_TYPE_LABELS[type]}
@@ -149,19 +148,13 @@ export function TransactionForm({
           ) : null}
         </>
       ) : (
-        <SelectField
-          label="Categoría"
+        <CategoryPicker
+          options={options}
+          categories={categories}
           value={values.categoryId}
-          onChange={(e) => set('categoryId', e.target.value)}
+          onChange={(id) => set('categoryId', id)}
           error={fieldError('categoryId')}
-        >
-          <option value="">Sin categoría</option>
-          {options.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.label}
-            </option>
-          ))}
-        </SelectField>
+        />
       )}
 
       <TextField

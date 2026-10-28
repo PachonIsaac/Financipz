@@ -1,13 +1,15 @@
 import { useMemo } from 'react'
+import { ChevronRight, CreditCard, Tag } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { PageHeader } from '../components/Layout'
 import { Button, Card } from '../components/ui'
+import { IconChip } from '../features/appearance'
 import { formatDateTime } from '../lib/dates'
 import { readWakeUps } from '../lib/warmup'
 
 const LINK =
-  'flex min-h-12 items-center justify-between px-1 text-base active:bg-slate-100 dark:active:bg-slate-800'
+  'flex min-h-[60px] items-center justify-between px-1 text-base active:bg-slate-800'
 
 /** How long the server took to wake up the last times, to judge whether the wait is acceptable. */
 function WakeUpSummary() {
@@ -35,10 +37,18 @@ export function MoreScreen() {
         <Card>
           <nav aria-label="Configuración" className="divide-y divide-slate-200 dark:divide-slate-800">
             <Link to="/more/accounts" className={LINK}>
-              Cuentas <span aria-hidden="true">›</span>
+              <span className="flex items-center gap-3">
+                <IconChip icon={CreditCard} size={36} />
+                Cuentas
+              </span>
+              <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
             </Link>
             <Link to="/more/categories" className={LINK}>
-              Categorías <span aria-hidden="true">›</span>
+              <span className="flex items-center gap-3">
+                <IconChip icon={Tag} size={36} />
+                Categorías
+              </span>
+              <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
             </Link>
           </nav>
         </Card>
