@@ -74,7 +74,8 @@ class TransactionUpdate(PartialUpdate):
 
 class TransactionOut(Output):
     id: uuid.UUID
-    account_id: uuid.UUID
+    # Null while an automatic source could not tell the account. Such a movement is pending review.
+    account_id: uuid.UUID | None
     target_account_id: uuid.UUID | None
     target_text: str | None
     classification: Classification | None

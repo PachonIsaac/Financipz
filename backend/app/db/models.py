@@ -144,6 +144,7 @@ class Transaction(Base):
             "type NOT IN ('adjustment_in', 'adjustment_out') OR (note IS NOT NULL AND btrim(note) <> '')",
             name="adjustment_requires_note",
         ),
+        CheckConstraint("account_id IS NOT NULL OR status <> 'confirmed'", name="account_required_when_confirmed"),
         Index("ix_transactions_date", "date"),
         Index("ix_transactions_account_id_date", "account_id", "date"),
         Index(
@@ -162,7 +163,9 @@ class Transaction(Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID_PK, primary_key=True, server_default=func.gen_random_uuid())
-    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id"))
+    # Null only while an automatic source could not tell which account the movement belongs to: it waits
+    # for review, and a movement cannot be confirmed without one.
+    account_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("accounts.id"))
     target_account_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("accounts.id"))
     target_text: Mapped[str | None] = mapped_column(Text)
     classification: Mapped[str | None] = mapped_column(Text)

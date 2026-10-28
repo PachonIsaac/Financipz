@@ -51,6 +51,8 @@ class Draft:
     # Amount received and rate already stored on an edited transfer, kept when nothing that
     # affects the conversion changed.
     stored_conversion: tuple[Decimal, Decimal] | None = None
+    # A movement waiting for review may be a transfer nobody has classified yet. Confirming it needs the class.
+    pending: bool = False
 
 
 def get_transaction(db: Session, transaction_id: uuid.UUID) -> models.Transaction:
@@ -83,6 +85,9 @@ def create_transaction(db: Session, data: TransactionCreate) -> models.Transacti
 def update_transaction(db: Session, transaction_id: uuid.UUID, data: TransactionUpdate) -> models.Transaction:
     row = get_transaction(db, transaction_id)
     changes = data.changes()
+    if row.account_id is None and changes.get("account_id") is None:
+        # Everything else about it depends on the account, so that is chosen first.
+        raise ApiError(409, "account_required", "Elige primero la cuenta del movimiento.")
 
     # Only these edits change how much the destination receives. Anything else (text, category,
     # date) keeps the stored conversion as it is, even if there is no rate for that day.
@@ -108,6 +113,7 @@ def update_transaction(db: Session, transaction_id: uuid.UUID, data: Transaction
             None if "target_account_id" in changes else (Classification(row.classification) if row.classification else None),
         ),
         stored_conversion=(row.target_amount, row.fx_rate) if keep_conversion else None,
+        pending=row.status == TransactionStatus.PENDING_REVIEW.value,
     )
     values = _prepare(db, draft, check_archived=moved, expected_currency=row.currency)
 
@@ -247,6 +253,18 @@ def _check_consistent_to_confirm(db: Session, row: models.Transaction) -> None:
     another currency, or a transfer between currencies without the amount received, would
     break every balance. The user fixes the account (or the amount) first.
     """
+    if row.account_id is None:
+        raise ApiError(409, "account_required", "Elige la cuenta del movimiento antes de confirmarlo.")
+    if (
+        row.type == TransactionType.TRANSFER.value
+        and row.target_account_id is None
+        and row.classification is None
+    ):
+        raise ApiError(
+            409,
+            "classification_required",
+            "Clasifica la transferencia (préstamo, gasto, transferencia propia o pago) antes de confirmarla.",
+        )
     source = db.get(models.Account, row.account_id)
     if row.currency != source.currency:
         raise ApiError(
@@ -313,6 +331,15 @@ def _prepare(
     return values
 
 
+def default_classification(source_type: AccountType, target_type: AccountType) -> Classification:
+    """What a transfer between two of the user's accounts is, when nobody said."""
+    if AccountType.LOAN in (source_type, target_type):
+        return Classification.LOAN
+    if target_type is AccountType.CREDIT_CARD:
+        return Classification.PAYMENT
+    return Classification.OWN_TRANSFER
+
+
 def _prepare_transfer(db: Session, source: models.Account, draft: Draft, check_archived: bool) -> dict[str, Any]:
     classification = draft.classification
 
@@ -321,7 +348,7 @@ def _prepare_transfer(db: Session, source: models.Account, draft: Draft, check_a
             raise ApiError(422, "target_amount_not_allowed", "El monto recibido solo aplica con una cuenta de destino.")
         if classification is Classification.LOAN or AccountType(source.type) is AccountType.LOAN:
             raise ApiError(422, "loan_account_mismatch", "Un préstamo necesita la cuenta de destino.")
-        if classification is None:
+        if classification is None and not draft.pending:
             # Money leaves and nothing says what it was: without a class it would vanish from the
             # flow without anyone noticing.
             raise ApiError(
@@ -355,12 +382,7 @@ def _prepare_transfer(db: Session, source: models.Account, draft: Draft, check_a
     source_type, target_type = AccountType(source.type), AccountType(target.type)
     involves_loan = AccountType.LOAN in (source_type, target_type)
     if classification is None:
-        if involves_loan:
-            classification = Classification.LOAN
-        elif target_type is AccountType.CREDIT_CARD:
-            classification = Classification.PAYMENT
-        else:
-            classification = Classification.OWN_TRANSFER
+        classification = default_classification(source_type, target_type)
     if (classification is Classification.LOAN) != involves_loan:
         raise ApiError(
             422,
