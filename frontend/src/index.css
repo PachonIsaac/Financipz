@@ -48,6 +48,45 @@ body {
   }
 }
 
+/* Liquid glass: a translucent, blurred surface with a bright top edge, floating above the content. */
+.glass {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.13), rgb(255 255 255 / 0.04)),
+    rgb(30 30 33 / 0.55);
+  -webkit-backdrop-filter: blur(28px) saturate(1.8);
+  backdrop-filter: blur(28px) saturate(1.8);
+  border: 1px solid rgb(255 255 255 / 0.15);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    inset 0 -1px 0 rgb(255 255 255 / 0.05),
+    0 14px 34px rgb(0 0 0 / 0.5);
+}
+
+.glass-active {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.08));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.35),
+    0 2px 8px rgb(0 0 0 / 0.25);
+}
+
+.glass-accent {
+  background: linear-gradient(180deg, rgb(255 190 140 / 0.95), rgb(255 138 61 / 0.88));
+  -webkit-backdrop-filter: blur(20px) saturate(1.6);
+  backdrop-filter: blur(20px) saturate(1.6);
+  border: 1px solid rgb(255 214 184 / 0.55);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    inset 0 -1px 0 rgb(160 70 10 / 0.35),
+    0 12px 30px rgb(255 138 61 / 0.35);
+}
+
+/* Without blur support the glass would be see-through text on text, so it falls back to a solid surface. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: #1e1e21;
+  }
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }

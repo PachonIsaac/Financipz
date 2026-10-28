@@ -48,7 +48,7 @@ export interface Look {
   color: string
 }
 
-const ICONS: Record<string, LucideIcon> = {
+export const ICONS: Record<string, LucideIcon> = {
   'shopping-cart': ShoppingCart,
   utensils: Utensils,
   car: Car,
@@ -145,3 +145,38 @@ export function IconChip({
     </span>
   )
 }
+
+/** What the person picks when editing a category: icons by their stored key, and the palette colors. */
+export const ICON_CHOICES: { key: string; label: string }[] = [
+  { key: 'shopping-cart', label: 'Carrito' },
+  { key: 'utensils', label: 'Cubiertos' },
+  { key: 'car', label: 'Auto' },
+  { key: 'house', label: 'Casa' },
+  { key: 'zap', label: 'Rayo' },
+  { key: 'heart-pulse', label: 'Salud' },
+  { key: 'ticket', label: 'Entrada' },
+  { key: 'graduation-cap', label: 'Educación' },
+  { key: 'shirt', label: 'Ropa' },
+  { key: 'repeat', label: 'Suscripción' },
+  { key: 'paw-print', label: 'Mascota' },
+  { key: 'gift', label: 'Regalo' },
+  { key: 'plane', label: 'Viaje' },
+  { key: 'smartphone', label: 'Tecnología' },
+  { key: 'receipt', label: 'Recibo' },
+  { key: 'briefcase', label: 'Trabajo' },
+  { key: 'sparkles', label: 'Extra' },
+  { key: 'percent', label: 'Intereses' },
+  { key: 'undo', label: 'Reembolso' },
+  { key: 'ellipsis', label: 'Otros' },
+]
+
+export const COLOR_CHOICES: { label: string; color: string }[] = [
+  { label: 'Naranja', color: TONES.orange },
+  { label: 'Azul', color: TONES.blue },
+  { label: 'Turquesa', color: TONES.aqua },
+  { label: 'Violeta', color: TONES.violet },
+  { label: 'Dorado', color: TONES.gold },
+  { label: 'Rosa', color: TONES.pink },
+  { label: 'Verde', color: TONES.green },
+  { label: 'Gris', color: TONES.gray },
+]

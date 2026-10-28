@@ -23,22 +23,26 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-6 px-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-      <div className="flex flex-col items-center gap-2">
-        <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="size-16" />
-        <h1 className="text-3xl font-bold">Financipz</h1>
+    <div className="relative mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-8 overflow-hidden px-6 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+      <div aria-hidden="true" className="pointer-events-none absolute -top-20 left-1/2 size-80 -translate-x-1/2 rounded-full bg-emerald-500/20 blur-[70px]" />
+      <div className="relative flex flex-col items-center gap-3 text-center">
+        <span className="flex size-[84px] items-center justify-center rounded-3xl border border-slate-800 bg-slate-900">
+          <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" className="size-12" />
+        </span>
+        <h1 className="text-[34px] leading-10 font-bold tracking-tight">Financipz</h1>
+        <p className="text-base text-slate-400">Tus finanzas personales, en un solo lugar.</p>
       </div>
       {auth.expired ? (
-        <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm text-amber-900">
+        <p role="status" className="relative rounded-xl bg-amber-200 p-3 text-sm text-amber-900">
           Tu sesión expiró. Inicia sesión de nuevo.
         </p>
       ) : null}
       {!auth.configured ? (
-        <p role="alert" className="rounded-xl bg-red-100 p-3 text-sm text-red-800">
+        <p role="alert" className="relative rounded-xl bg-red-100 p-3 text-sm text-red-800">
           Falta configurar el inicio de sesión de la aplicación.
         </p>
       ) : null}
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} noValidate className="relative flex flex-col gap-4">
         <TextField
           label="Correo electrónico"
           type="email"

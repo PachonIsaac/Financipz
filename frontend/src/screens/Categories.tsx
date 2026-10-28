@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react'
+import { ChevronRight } from 'lucide-react'
 import { useCategories, useCreateCategory, useDeleteCategory, useUpdateCategory } from '../api/hooks'
 import type { Category, CategoryType } from '../api/types'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, FormError, ListSkeleton } from '../components/states'
 import { useToast } from '../components/Toast'
 import { Button, SelectField, TextField } from '../components/ui'
+import { categoryLook, IconChip } from '../features/appearance'
+import { AppearancePicker } from '../features/categories/AppearancePicker'
 import { CATEGORY_TYPE_LABELS } from '../features/labels'
 import { categoryOptions } from '../features/transactions/display'
 
@@ -30,6 +33,8 @@ function CategoryForm({
   const [name, setName] = useState(category?.name ?? '')
   const [type, setType] = useState<CategoryType>(category?.type ?? defaultType)
   const [parentId, setParentId] = useState(category?.parent_id ?? '')
+  const [icon, setIcon] = useState(category?.icon ?? '')
+  const [color, setColor] = useState(category?.color ?? '')
   const [nameError, setNameError] = useState<string | undefined>()
   const [deleting, setDeleting] = useState(false)
   const [reassignTo, setReassignTo] = useState('')
@@ -48,9 +53,11 @@ function CategoryForm({
     }
     setNameError(undefined)
     if (category) {
-      const body: { name?: string; parent_id?: string | null } = {}
+      const body: { name?: string; parent_id?: string | null; icon?: string | null; color?: string | null } = {}
       if (trimmed !== category.name) body.name = trimmed
       if ((parentId || null) !== category.parent_id) body.parent_id = parentId || null
+      if ((icon || null) !== category.icon) body.icon = icon || null
+      if ((color || null) !== category.color) body.color = color || null
       if (Object.keys(body).length === 0) return onDone()
       update.mutate(
         { id: category.id, body },
@@ -63,7 +70,7 @@ function CategoryForm({
       )
     } else {
       create.mutate(
-        { name: trimmed, type, parent_id: parentId || null },
+        { name: trimmed, type, parent_id: parentId || null, icon: icon || null, color: color || null },
         {
           onSuccess: () => {
             toast.show('Categoría creada')
@@ -74,12 +81,19 @@ function CategoryForm({
     }
   }
 
+  const preview = categoryLook({ name, icon: icon || null, color: color || null, type })
   const reassignOptions = category ? categoryOptions(all, category.type, category.id) : []
 
   return (
     <div className="flex flex-col gap-6">
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-        <TextField label="Nombre" value={name} onChange={(e) => setName(e.target.value)} error={nameError} />
+        <div className="flex flex-col items-center gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-5">
+          <IconChip icon={preview.Icon} color={preview.color} size={64} />
+          <div className="w-full">
+            <TextField label="Nombre" value={name} onChange={(e) => setName(e.target.value)} error={nameError} />
+          </div>
+        </div>
+        <AppearancePicker icon={icon} color={color} onIcon={setIcon} onColor={setColor} />
         <SelectField
           label="Tipo"
           value={type}
@@ -202,9 +216,11 @@ export function CategoriesScreen() {
       <button
         type="button"
         onClick={() => setPanel({ kind: 'edit', category: c })}
-        className={`flex min-h-11 w-full items-center rounded-xl px-3 text-left text-base active:bg-slate-200 dark:active:bg-slate-800 ${child ? 'pl-8 text-slate-700 dark:text-slate-300' : 'font-medium'}`}
+        className={`flex w-full items-center gap-3 border-t border-slate-800 text-left text-base active:bg-slate-800/60 ${child ? 'min-h-[52px] pl-[52px] text-[15px] text-slate-300' : 'min-h-16'}`}
       >
-        {c.name}
+        {child ? null : <IconChip icon={categoryLook(c).Icon} color={categoryLook(c).color} />}
+        <span className="flex-1">{c.name}</span>
+        <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
       </button>
     </li>
   )
@@ -216,15 +232,15 @@ export function CategoriesScreen() {
         back={{ to: '/more', label: 'Volver a Más' }}
         action={<Button onClick={() => setPanel({ kind: 'create' })}>Nueva</Button>}
       />
-      <div role="group" aria-label="Tipo de categoría" className="mb-4 grid grid-cols-3 gap-2">
+      <div role="group" aria-label="Tipo de categoría" className="mb-4 grid grid-cols-3 gap-1 rounded-2xl border border-slate-800 bg-slate-900 p-1">
         {TYPES.map((t) => (
           <button
             key={t}
             type="button"
             aria-pressed={type === t}
             onClick={() => setType(t)}
-            className={`min-h-11 rounded-xl text-sm font-medium ${
-              type === t ? 'bg-emerald-500 text-slate-950' : 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
+            className={`min-h-11 rounded-xl text-[15px] ${
+              type === t ? 'bg-emerald-500 font-semibold text-slate-950' : 'text-slate-400'
             }`}
           >
             {CATEGORY_TYPE_LABELS[t]}
@@ -242,7 +258,7 @@ export function CategoriesScreen() {
           action={<Button onClick={() => setPanel({ kind: 'create' })}>Crear categoría</Button>}
         />
       ) : (
-        <ul>
+        <ul className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 px-4 [&>li:first-child>button]:border-t-0">
           {parents.flatMap((parent) => [
             row(parent, false),
             ...shown

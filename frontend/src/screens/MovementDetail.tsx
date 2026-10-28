@@ -13,6 +13,7 @@ import { PageHeader } from '../components/Layout'
 import { ErrorState, FormError, ListSkeleton } from '../components/states'
 import { useToast } from '../components/Toast'
 import { Badge, Button, Card } from '../components/ui'
+import { categoryLook, IconChip } from '../features/appearance'
 import { SOURCE_LABELS, STATUS_LABELS, TRANSACTION_TYPE_LABELS } from '../features/labels'
 import { directionOf, signedAmount } from '../features/transactions/display'
 import { buildUpdate, type TransactionFormValues } from '../features/transactions/form'
@@ -88,6 +89,7 @@ export function MovementDetailScreen() {
   const account = accountList.find((a) => a.id === tx.account_id)
   const target = accountList.find((a) => a.id === tx.target_account_id)
   const category = (categories.data ?? []).find((c) => c.id === tx.category_id)
+  const look = categoryLook(category, tx.type === 'transfer' ? 'transfer' : undefined)
   const editable = tx.type === 'expense' || tx.type === 'income' || tx.type === 'transfer'
   const direction = directionOf(tx.type)
 
@@ -132,8 +134,13 @@ export function MovementDetailScreen() {
     <>
       <PageHeader title={TRANSACTION_TYPE_LABELS[tx.type]} back={back} />
       <div className="flex flex-col gap-4">
-        <Card className="text-center">
-          <p className="text-4xl font-bold">
+        <Card className="flex flex-col items-center gap-1.5 py-6 text-center">
+          <IconChip
+            icon={look.Icon}
+            color={tx.type === 'transfer' ? undefined : look.color}
+            size={56}
+          />
+          <p className="mt-2 text-[44px] leading-[50px] font-bold tracking-tight">
             <Amount
               value={signedAmount(tx)}
               currency={tx.currency}
@@ -142,8 +149,8 @@ export function MovementDetailScreen() {
               tone={direction === 'neutral' ? 'neutral' : 'auto'}
             />
           </p>
-          {tx.merchant ? <p className="mt-1 text-lg">{tx.merchant}</p> : null}
-          <div className="mt-2 flex justify-center gap-2">
+          {tx.merchant ? <p className="text-base text-slate-400">{tx.merchant}</p> : null}
+          <div className="mt-1 flex justify-center gap-2">
             {tx.status !== 'confirmed' ? <Badge tone="warning">{STATUS_LABELS[tx.status]}</Badge> : null}
             <Badge>{SOURCE_LABELS[tx.source]}</Badge>
           </div>
