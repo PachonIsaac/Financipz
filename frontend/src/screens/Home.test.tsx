@@ -59,12 +59,14 @@ describe('home screen', () => {
     expect(screen.getByText('-$ 45.000')).toBeInTheDocument()
   })
 
-  it('shows only the available money, without real money or card debt', async () => {
+  it('shows the balance as the money left after the card debt, with no explanation', async () => {
     renderWithApp(<HomeScreen />, { api: base() })
 
-    expect(await screen.findByLabelText('Disponible')).toHaveTextContent('$ 500.000')
+    expect(await screen.findByLabelText('Balance')).toHaveTextContent('-$ 300.000')
+    expect(screen.queryByText('Disponible')).not.toBeInTheDocument()
     expect(screen.queryByText('Dinero real')).not.toBeInTheDocument()
     expect(screen.queryByText(/Deuda de tarjetas/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/supera/)).not.toBeInTheDocument()
   })
 
   it('marks an account that is left out of the balance', async () => {
@@ -119,7 +121,7 @@ describe('Home with data shaped like the real API', () => {
     const withoutRate: Wealth = { ...wealth, rate: null }
     renderWithApp(<HomeScreen />, { api: base({ getWealth: vi.fn(async () => withoutRate), getSummary: vi.fn(async () => summary) }), path: '/' })
 
-    expect(await screen.findByLabelText('Disponible')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Balance')).toBeInTheDocument()
     expect(screen.queryByText(/TRM/)).not.toBeInTheDocument()
   })
 
@@ -129,7 +131,7 @@ describe('Home with data shaped like the real API', () => {
     renderWithApp(<HomeScreen />, { api: base({ getWealth: vi.fn(async () => broken), getSummary: vi.fn(async () => summary) }), path: '/' })
 
     // The rate line cannot be drawn, and the rest of the screen is still there.
-    expect(await screen.findByLabelText('Disponible')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Balance')).toBeInTheDocument()
     expect((await screen.findAllByText('Ingresos')).length).toBeGreaterThan(0)
     expect(await screen.findByText('Cuenta de ahorros')).toBeInTheDocument()
     spy.mockRestore()

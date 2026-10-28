@@ -24,16 +24,16 @@ function reportError(error: unknown) {
     : null
 }
 
-function AvailableCard() {
+function BalanceCard() {
   const wealth = useWealth()
   const data = wealth.data
   const fxMessage = reportError(wealth.error)
 
   return (
     <Card className="p-5">
-      <h2 className="text-sm font-medium text-slate-400">Disponible</h2>
+      <h2 className="text-sm font-medium text-slate-400">Balance</h2>
       {wealth.isPending ? (
-        <ListSkeleton rows={1} label="Cargando el disponible" />
+        <ListSkeleton rows={1} label="Cargando el balance" />
       ) : fxMessage ? (
         <p role="alert" className="mt-1 text-sm text-amber-300">
           {fxMessage}
@@ -41,8 +41,8 @@ function AvailableCard() {
       ) : wealth.isError ? (
         <ErrorState error={wealth.error} onRetry={() => void wealth.refetch()} />
       ) : data ? (
-        <p className="mt-1 text-[40px] leading-[46px] font-bold tracking-tight" aria-label="Disponible">
-          <Amount value={data.available} currency="COP" tone="neutral" />
+        <p className="mt-1 text-[40px] leading-[46px] font-bold tracking-tight" aria-label="Balance">
+          <Amount value={data.real_money} currency="COP" />
         </p>
       ) : null}
     </Card>
@@ -216,8 +216,8 @@ export function HomeScreen() {
       <div className="flex flex-col gap-4">
         {refresh.data ? <RefreshResultText result={refresh.data} /> : null}
         {refresh.isError ? <ErrorState error={refresh.error} /> : null}
-        <ErrorBoundary label="No se pudo mostrar el disponible.">
-          <AvailableCard />
+        <ErrorBoundary label="No se pudo mostrar el balance.">
+          <BalanceCard />
         </ErrorBoundary>
         <ErrorBoundary label="No se pudo mostrar el resumen del mes.">
           <MonthSummaryCard />
