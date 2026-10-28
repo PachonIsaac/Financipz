@@ -67,6 +67,11 @@ BINANCE_ERRORS: dict[str, tuple[int, str, str]] = {
         "binance_bad_response",
         "Binance respondió algo que no se pudo interpretar. Intenta de nuevo más tarde.",
     ),
+    binance.REGION_BLOCKED: (
+        502,
+        "binance_region_blocked",
+        "Binance no atiende consultas desde la ubicación del servidor. Sincroniza desde otra red o desde tu computador.",
+    ),
     binance.REJECTED: (
         502,
         "binance_rejected",

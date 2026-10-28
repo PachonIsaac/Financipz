@@ -114,6 +114,7 @@ def test_the_client_never_writes_to_the_exchange():
         (400, {"code": -1100, "msg": "Illegal characters"}, binance.REJECTED),
         (403, {"msg": "WAF"}, binance.ACCESS_DENIED),
         (404, {"msg": "nope"}, binance.REJECTED),
+        (451, {"code": 0, "msg": "Service unavailable from a restricted location"}, binance.REGION_BLOCKED),
     ],
 )
 def test_binance_errors_map_to_a_kind_without_leaking_credentials(status, body, kind):

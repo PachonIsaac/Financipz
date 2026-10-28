@@ -38,6 +38,8 @@ RATE_LIMITED = "rate_limited"
 UNAVAILABLE = "unavailable"
 BAD_RESPONSE = "bad_response"
 REJECTED = "rejected"
+# The exchange does not serve the place the request comes from (HTTP 451).
+REGION_BLOCKED = "region_blocked"
 
 # Binance error codes (the `code` field of an error body).
 CODE_KINDS = {
@@ -207,6 +209,8 @@ class BinanceClient:
             raise BinanceError(RATE_LIMITED, retry_after=retry_after)
         if status >= 500:
             raise BinanceError(UNAVAILABLE)
+        if status == 451:
+            raise BinanceError(REGION_BLOCKED)
 
         try:
             body = response.json()

@@ -665,3 +665,15 @@ def test_the_job_refuses_unknown_options_without_syncing(monkeypatch):
 
     assert stop.value.code == 2
     assert called == []
+
+
+def test_a_request_from_a_blocked_region_says_so_and_writes_nothing(client, connected, db):
+    connected.overrides["/api/v3/account"] = error(451, 0, "Service unavailable from a restricted location")
+
+    response = sync(client)
+
+    assert response.status_code == 502
+    assert error_code(response) == "binance_region_blocked"
+    assert "ubicación del servidor" in response.json()["error"]["message"]
+    assert count(db, models.CryptoBalance) == 0
+    assert integration(db).last_synced_at is None
