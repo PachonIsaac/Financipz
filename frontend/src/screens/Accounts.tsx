@@ -12,7 +12,8 @@ import { Amount } from '../components/Amount'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, FormError, ListSkeleton } from '../components/states'
 import { useToast } from '../components/Toast'
-import { Badge, Button, Card, SelectField, TextField } from '../components/ui'
+import { Badge, Button, Card, SelectField, Switch, TextField } from '../components/ui'
+import { accountIcon, IconChip, TONES } from '../features/appearance'
 import {
   accountToValues,
   buildAccountCreate,
@@ -118,20 +119,14 @@ function AccountForm({ account, onDone }: { account?: Account; onDone: () => voi
         error={errors.key}
       />
       {account?.type === 'exchange' ? null : (
-        <label className="flex min-h-11 items-start gap-3">
-          <input
-            type="checkbox"
-            className="mt-0.5 size-5"
+        <Card>
+          <Switch
             checked={values.includeInBalance}
-            onChange={(e) => set('includeInBalance', e.target.checked)}
+            onChange={(checked) => set('includeInBalance', checked)}
+            label="Incluir en el balance"
+            description="Desactivado: esta cuenta no suma al disponible, a la deuda de tarjetas ni a los préstamos. Sus movimientos siguen apareciendo."
           />
-          <span>
-            <span className="block text-base">Incluir en el balance</span>
-            <span className="block text-sm text-slate-600 dark:text-slate-400">
-              Si lo desactivas, esta cuenta no suma al disponible, a la deuda de tarjetas ni a los préstamos.
-            </span>
-          </span>
-        </label>
+        </Card>
       )}
       <FormError error={mutation.error} />
       <Button type="submit" disabled={mutation.isPending}>
@@ -373,27 +368,37 @@ export function AccountsScreen() {
           action={<Button onClick={() => setPanel({ kind: 'create' })}>Crear cuenta</Button>}
         />
       ) : (
-        <ul className="flex flex-col gap-2">
-          {visible.map((account) => (
-            <li key={account.id}>
-              <button
-                type="button"
-                onClick={() => setPanel({ kind: 'edit', account })}
-                className="flex min-h-14 w-full items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-left active:bg-slate-100 dark:border-slate-800 dark:bg-slate-900 dark:active:bg-slate-800"
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-base font-medium">{account.name}</span>
-                  <span className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
-                    {ACCOUNT_TYPE_LABELS[account.type]} · {account.currency}
-                    {account.archived ? <Badge>Archivada</Badge> : null}
-                    {account.include_in_balance ? null : <Badge>Fuera del balance</Badge>}
+        <>
+          <ul className="rounded-3xl border border-slate-800 bg-slate-900 px-4">
+            {visible.map((account) => (
+              <li key={account.id} className="border-t border-slate-800 first:border-t-0">
+                <button
+                  type="button"
+                  onClick={() => setPanel({ kind: 'edit', account })}
+                  className="flex min-h-[68px] w-full items-center gap-3 py-2 text-left active:bg-slate-800/60"
+                >
+                  <IconChip icon={accountIcon(account.type)} color={account.include_in_balance ? undefined : TONES.gray} />
+                  <span className={`min-w-0 flex-1 ${account.include_in_balance ? '' : 'opacity-70'}`}>
+                    <span className="block truncate text-base">{account.name}</span>
+                    <span className="flex flex-wrap items-center gap-1.5 text-[13px] text-slate-400">
+                      {ACCOUNT_TYPE_LABELS[account.type]} · {account.currency}
+                      {account.archived ? <Badge>Archivada</Badge> : null}
+                      {account.include_in_balance ? null : <Badge>Fuera del balance</Badge>}
+                    </span>
                   </span>
-                </span>
-                <Amount value={account.balance} currency={account.currency} className="text-base font-semibold" />
-              </button>
-            </li>
-          ))}
-        </ul>
+                  <Amount
+                    value={account.balance}
+                    currency={account.currency}
+                    className={`text-base font-semibold ${account.include_in_balance ? '' : 'text-slate-400'}`}
+                  />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 px-1 text-[13px] leading-[19px] text-slate-400">
+            Las cuentas fuera del balance no suman al disponible, a la deuda de tarjetas ni a los préstamos. Sus movimientos siguen apareciendo.
+          </p>
+        </>
       )}
       {hasArchived ? (
         <label className="mt-4 flex min-h-11 items-center gap-3 text-sm">

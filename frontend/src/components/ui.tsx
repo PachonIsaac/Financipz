@@ -146,3 +146,46 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
   }
   return <span className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>
 }
+
+/** An on/off setting with its explanation, as a switch the whole row can toggle. */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  description,
+}: {
+  checked: boolean
+  onChange: (checked: boolean) => void
+  label: string
+  description?: string | undefined
+}) {
+  const id = useId()
+  return (
+    <div>
+      <div className="flex min-h-11 items-center justify-between gap-4">
+        <span id={`${id}-label`} className="text-[17px] font-semibold">
+          {label}
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-labelledby={`${id}-label`}
+          aria-describedby={description ? `${id}-description` : undefined}
+          onClick={() => onChange(!checked)}
+          className={`relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors ${checked ? 'bg-emerald-500' : 'bg-slate-700'}`}
+        >
+          <span
+            aria-hidden="true"
+            className={`absolute top-[2px] size-[27px] rounded-full transition-all ${checked ? 'left-[22px] bg-slate-950' : 'left-[2px] bg-slate-50'}`}
+          />
+        </button>
+      </div>
+      {description ? (
+        <p id={`${id}-description`} className="mt-1.5 text-[13px] leading-[19px] text-slate-400">
+          {description}
+        </p>
+      ) : null}
+    </div>
+  )
+}
