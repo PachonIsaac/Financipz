@@ -30,6 +30,25 @@ describe('movements screen', () => {
     await waitFor(() => expect(listTransactions).toHaveBeenLastCalledWith({ type: 'income' }, undefined))
   })
 
+  it('filters with the chips, including the ones waiting for review', async () => {
+    const user = userEvent.setup()
+    const listTransactions = vi.fn(async () => ({ items: [], next_cursor: null }))
+    const api = fakeApi({
+      listTransactions: listTransactions as never,
+      listAccounts: vi.fn(async () => []),
+      listCategories: vi.fn(async () => []),
+    })
+    renderWithApp(<MovementsScreen />, { api })
+
+    await user.click(await screen.findByRole('button', { name: 'Gastos' }))
+    await waitFor(() => expect(listTransactions).toHaveBeenLastCalledWith({ type: 'expense' }, undefined))
+
+    await user.click(screen.getByRole('button', { name: 'Por revisar' }))
+    await waitFor(() => expect(listTransactions).toHaveBeenLastCalledWith({ status: 'pending_review' }, undefined))
+    expect(screen.getByRole('button', { name: 'Por revisar' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Gastos' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
   it('shows an empty state', async () => {
     const api = fakeApi({
       listTransactions: vi.fn(async () => ({ items: [], next_cursor: null })),

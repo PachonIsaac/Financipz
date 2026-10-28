@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search, SlidersHorizontal } from 'lucide-react'
 import { useTransactionList } from '../api/hooks'
 import type { TransactionFilters, TransactionType } from '../api/types'
 import { Amount } from '../components/Amount'
@@ -11,6 +12,13 @@ import { categoryOptions } from '../features/transactions/display'
 import { groupByDay } from '../features/transactions/grouping'
 import { TransactionRow } from '../features/transactions/TransactionRow'
 import { formatDayHeading } from '../lib/dates'
+
+const QUICK_FILTERS: { label: string; type: TransactionType | '' }[] = [
+  { label: 'Todos', type: '' },
+  { label: 'Gastos', type: 'expense' },
+  { label: 'Ingresos', type: 'income' },
+  { label: 'Transferencias', type: 'transfer' },
+]
 
 const FILTER_TYPES: TransactionType[] = ['expense', 'income', 'transfer', 'adjustment_in', 'adjustment_out']
 
@@ -31,6 +39,8 @@ export function MovementsScreen() {
   const [categoryId, setCategoryId] = useState('')
   const [type, setType] = useState<TransactionType | ''>('')
   const [showFilters, setShowFilters] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [pending, setPending] = useState(false)
   const q = useDebounced(text.trim(), 300)
 
   const filters = useMemo<TransactionFilters>(() => {
@@ -41,13 +51,14 @@ export function MovementsScreen() {
     if (accountId) result.account_id = accountId
     if (categoryId) result.category_id = categoryId
     if (type) result.type = type
+    if (pending) result.status = 'pending_review'
     return result
-  }, [q, from, to, accountId, categoryId, type])
+  }, [q, from, to, accountId, categoryId, type, pending])
 
   const list = useTransactionList(filters)
   const { accounts, categories, accountsQuery, categoriesQuery } = useLookups()
   const groups = useMemo(() => groupByDay(list.data?.pages.flatMap((p) => p.items) ?? []), [list.data])
-  const activeFilters = [from, to, accountId, categoryId, type].filter(Boolean).length
+  const activeFilters = [from, to, accountId, categoryId].filter(Boolean).length
 
   const sentinel = useRef<HTMLDivElement>(null)
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = list
@@ -67,14 +78,37 @@ export function MovementsScreen() {
     setTo('')
     setAccountId('')
     setCategoryId('')
-    setType('')
   }
 
   return (
     <>
-      <PageHeader title="Movimientos" />
-      <div className="mb-3 flex gap-2">
-        <div className="min-w-0 flex-1">
+      <PageHeader
+        title="Movimientos"
+        action={
+          <div className="flex gap-2">
+            <button
+              type="button"
+              aria-label="Buscar"
+              aria-expanded={showSearch}
+              onClick={() => setShowSearch((v) => !v)}
+              className="flex size-11 items-center justify-center rounded-full border border-slate-800 bg-slate-900 active:bg-slate-800"
+            >
+              <Search aria-hidden="true" size={20} strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              aria-label={`Filtros${activeFilters ? ` (${activeFilters})` : ''}`}
+              aria-expanded={showFilters}
+              onClick={() => setShowFilters((v) => !v)}
+              className={`flex size-11 items-center justify-center rounded-full border bg-slate-900 active:bg-slate-800 ${activeFilters ? 'border-emerald-500 text-emerald-500' : 'border-slate-800'}`}
+            >
+              <SlidersHorizontal aria-hidden="true" size={20} strokeWidth={1.75} />
+            </button>
+          </div>
+        }
+      />
+      {showSearch ? (
+        <div className="mb-3">
           <TextField
             label="Buscar"
             type="search"
@@ -83,18 +117,26 @@ export function MovementsScreen() {
             onChange={(e) => setText(e.target.value)}
           />
         </div>
-        <Button
-          variant="secondary"
-          className="self-end"
-          aria-expanded={showFilters}
-          onClick={() => setShowFilters((v) => !v)}
-        >
-          Filtros{activeFilters ? ` (${activeFilters})` : ''}
-        </Button>
+      ) : null}
+      <div role="group" aria-label="Tipo de movimiento" className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
+        {[
+          ...QUICK_FILTERS.map((chip) => ({ label: chip.label, active: !pending && type === chip.type, select: () => { setPending(false); setType(chip.type) } })),
+          { label: 'Por revisar', active: pending, select: () => { setPending(true); setType('') } },
+        ].map((chip) => (
+          <button
+            key={chip.label}
+            type="button"
+            aria-pressed={chip.active}
+            onClick={chip.select}
+            className={`min-h-11 shrink-0 rounded-full border px-4 text-[15px] ${chip.active ? 'border-emerald-500 bg-emerald-500/15 font-semibold text-emerald-500' : 'border-slate-800 bg-slate-900'}`}
+          >
+            {chip.label}
+          </button>
+        ))}
       </div>
 
       {showFilters ? (
-        <div className="mb-4 grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-800">
+        <div className="mb-4 grid grid-cols-2 gap-3 rounded-3xl border border-slate-800 bg-slate-900 p-4">
           <TextField label="Desde" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           <TextField label="Hasta" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           <SelectField label="Cuenta" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
@@ -148,18 +190,18 @@ export function MovementsScreen() {
           }
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col">
           {groups.map((group) => (
             <section key={group.day} aria-label={formatDayHeading(group.day)}>
-              <div className="mb-1 flex items-baseline justify-between gap-2 text-sm text-slate-500 dark:text-slate-400">
-                <h2 className="font-medium capitalize">{formatDayHeading(group.day)}</h2>
+              <div className="flex items-baseline justify-between gap-2 px-1 pt-3 pb-2 text-[13px] text-slate-400">
+                <h2 className="font-semibold tracking-wide uppercase">{formatDayHeading(group.day)}</h2>
                 <span className="flex gap-2">
                   {group.totals.map((total) => (
-                    <Amount key={total.currency} value={total.amount} currency={total.currency} />
+                    <Amount key={total.currency} value={total.amount} currency={total.currency} tone="neutral" />
                   ))}
                 </span>
               </div>
-              <ul>
+              <ul className="rounded-3xl border border-slate-800 bg-slate-900 px-4">
                 {group.items.map((tx) => (
                   <TransactionRow key={tx.id} tx={tx} accounts={accounts} categories={categories} />
                 ))}
