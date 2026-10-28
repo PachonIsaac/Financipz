@@ -11,6 +11,7 @@ import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
 import { TrendChart } from '../components/TrendChart'
 import { Card } from '../components/ui'
 import { accountIcon, categoryLook, IconChip, TONES } from '../features/appearance'
+import { shownBalance } from '../features/accounts/display'
 import { useLookups } from '../features/lookups'
 import { ACCOUNT_TYPE_LABELS } from '../features/labels'
 import { formatMonth, percentOf, shiftMonth, topCategories } from '../features/summary'
@@ -261,7 +262,7 @@ export function HomeScreen() {
                     </p>
                   </div>
                   <Amount
-                    value={account.balance}
+                    value={shownBalance(account, wealth.data?.crypto)}
                     currency={account.currency}
                     className={`text-base font-semibold ${account.include_in_balance ? '' : 'text-slate-400'}`}
                   />

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import {
+  useWealth,
   useAccounts,
   useAdjustAccount,
   useCreateAccount,
@@ -13,6 +14,7 @@ import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, FormError, ListSkeleton } from '../components/states'
 import { useToast } from '../components/Toast'
 import { Badge, Button, Card, SelectField, Switch, TextField } from '../components/ui'
+import { shownBalance } from '../features/accounts/display'
 import { accountIcon, IconChip, TONES } from '../features/appearance'
 import {
   accountToValues,
@@ -314,6 +316,7 @@ function EditPanel({ account, onNavigate }: { account: Account; onNavigate: (pan
 
 export function AccountsScreen() {
   const accounts = useAccounts()
+  const wealth = useWealth()
   const [panel, setPanel] = useState<Panel>({ kind: 'list' })
   const [showArchived, setShowArchived] = useState(false)
   const toList = () => setPanel({ kind: 'list' })
@@ -387,7 +390,7 @@ export function AccountsScreen() {
                     </span>
                   </span>
                   <Amount
-                    value={account.balance}
+                    value={shownBalance(account, wealth.data?.crypto)}
                     currency={account.currency}
                     className={`text-base font-semibold ${account.include_in_balance ? '' : 'text-slate-400'}`}
                   />

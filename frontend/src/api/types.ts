@@ -216,7 +216,7 @@ export interface Wealth {
   receivable_loans: string
   loans: Loan[]
   accounts: WealthAccount[]
-  crypto: { value_usd: string | null }
+  crypto: { value_usd: string | null; value_cop?: string | null; snapshot_date?: string | null }
   rate: { currency: Currency; value: string; date: string } | null
 }
 

@@ -140,6 +140,22 @@ describe('Home with data shaped like the real API', () => {
   })
 })
 
+describe('the exchange account', () => {
+  it('shows the value of the latest snapshot instead of an empty balance', async () => {
+    const api = base({
+      listAccounts: vi.fn(async () => [
+        account({ id: 'acc-1', name: 'Cuenta de ahorros' }),
+        account({ id: 'acc-x', name: 'Binance', type: 'exchange', currency: 'USD', balance: '0.00', include_in_balance: false }),
+      ]),
+      getWealth: vi.fn(async () => ({ ...wealth, crypto: { value_usd: '1798.64', value_cop: '5662154.69', snapshot_date: '2026-10-28' } })),
+    })
+    renderWithApp(<HomeScreen />, { api })
+
+    expect(await screen.findByText('US$ 1.798,64')).toBeInTheDocument()
+    expect(screen.queryByText('US$ 0,00')).not.toBeInTheDocument()
+  })
+})
+
 describe('refreshing the data', () => {
   const result = (overrides = {}) => ({
     fx_rates: { status: 'ok', code: null, message: null },
