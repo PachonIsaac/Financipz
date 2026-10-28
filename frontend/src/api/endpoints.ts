@@ -10,7 +10,12 @@ import type {
   CategoryType,
   CategoryUpdate,
   Identifier,
+  BinanceSyncResult,
+  HistoryPoint,
+  Integration,
   Me,
+  Portfolio,
+  TradePage,
   RefreshResult,
   Summary,
   Wealth,
@@ -59,6 +64,17 @@ export function createEndpoints(client: ApiClient) {
 
     getSummary: (month: string) => request<Summary>('/summary', { query: { month } }),
     getWealth: () => request<Wealth>('/wealth'),
+
+    getPortfolio: () => request<Portfolio>('/crypto/portfolio'),
+    getCryptoHistory: (from: string) => request<HistoryPoint[]>('/crypto/history', { query: { from } }),
+    listTrades: (cursor?: string) => request<TradePage>('/crypto/trades', { query: { cursor, limit: 20 } }),
+
+    listIntegrations: () => request<Integration[]>('/integrations'),
+    connectBinance: (apiKey: string, apiSecret: string) =>
+      request<Integration>('/integrations/binance', { method: 'PUT', body: { api_key: apiKey, api_secret: apiSecret } }),
+    disconnectBinance: () => request<void>('/integrations/binance', { method: 'DELETE' }),
+    // The exchange may be read by a deployment that is asleep, which takes a while to answer.
+    syncBinance: () => request<BinanceSyncResult>('/integrations/binance/sync', { method: 'POST', timeoutMs: 160_000 }),
 
     // Reads the exchange rate and the exchange balances; a sleeping server may need a while.
     refreshData: () => request<RefreshResult>('/refresh', { method: 'POST', timeoutMs: 160_000 }),

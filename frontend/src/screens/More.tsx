@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ChevronRight, CreditCard, Tag } from 'lucide-react'
+import { ChevronRight, Coins, CreditCard, Tag } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { PageHeader } from '../components/Layout'
@@ -40,6 +40,13 @@ export function MoreScreen() {
               <span className="flex items-center gap-3">
                 <IconChip icon={CreditCard} size={36} />
                 Cuentas
+              </span>
+              <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
+            </Link>
+            <Link to="/crypto" className={LINK}>
+              <span className="flex items-center gap-3">
+                <IconChip icon={Coins} size={36} />
+                Cripto
               </span>
               <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
             </Link>

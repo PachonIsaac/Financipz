@@ -151,8 +151,29 @@ describe('the exchange account', () => {
     })
     renderWithApp(<HomeScreen />, { api })
 
-    expect(await screen.findByText('US$ 1.798,64')).toBeInTheDocument()
+    expect((await screen.findAllByText('US$ 1.798,64')).length).toBeGreaterThan(0)
     expect(screen.queryByText('US$ 0,00')).not.toBeInTheDocument()
+  })
+})
+
+describe('the crypto card', () => {
+  it('shows the value of the portfolio and links to the crypto screen, and hides when there is none', async () => {
+    const withCrypto = base({
+      getWealth: vi.fn(async () => ({ ...wealth, crypto: { value_usd: '1798.64', value_cop: '5662154.69', snapshot_date: '2026-10-28' } })),
+    })
+    renderWithApp(<HomeScreen />, { api: withCrypto })
+
+    const card = await screen.findByRole('link', { name: 'Cripto' })
+    expect(card).toHaveAttribute('href', '/crypto')
+    expect(card).toHaveTextContent('US$ 1.798,64')
+    expect(card).toHaveTextContent('$ 5,66 M')
+  })
+
+  it('does not show a card when the exchange has never been read', async () => {
+    renderWithApp(<HomeScreen />, { api: base() })
+    await screen.findByText('Cuenta de ahorros')
+
+    expect(screen.queryByRole('link', { name: 'Cripto' })).not.toBeInTheDocument()
   })
 })
 

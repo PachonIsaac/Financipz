@@ -30,6 +30,13 @@ export function fakeApi(overrides: Partial<Endpoints> = {}): Endpoints {
     getSummary: unmocked('getSummary'),
     getWealth: unmocked('getWealth'),
     refreshData: unmocked('refreshData'),
+    getPortfolio: unmocked('getPortfolio'),
+    getCryptoHistory: unmocked('getCryptoHistory'),
+    listTrades: unmocked('listTrades'),
+    listIntegrations: unmocked('listIntegrations'),
+    connectBinance: unmocked('connectBinance'),
+    disconnectBinance: unmocked('disconnectBinance'),
+    syncBinance: unmocked('syncBinance'),
     confirmTransaction: unmocked('confirmTransaction'),
     discardTransaction: unmocked('discardTransaction'),
   }

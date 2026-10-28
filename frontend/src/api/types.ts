@@ -233,3 +233,66 @@ export interface RefreshResult {
   /** True when the previous result was returned because it was too recent to run again. */
   cached: boolean
 }
+
+export interface PortfolioAsset {
+  asset: string
+  quantity: string
+  /** Null when the asset could not be priced. */
+  value_usd: string | null
+  value_cop: string | null
+}
+
+export interface Portfolio {
+  snapshot_date: string | null
+  total_usd: string | null
+  total_cop: string | null
+  unpriced_assets: number
+  rate: { currency: Currency; value: string; date: string } | null
+  assets: PortfolioAsset[]
+}
+
+export interface HistoryPoint {
+  date: string
+  total_usd: string
+}
+
+export interface Trade {
+  id: string
+  account_id: string
+  pair: string
+  side: 'buy' | 'sell'
+  quantity: string
+  price: string
+  fee: string
+  fee_asset: string | null
+  executed_at: string
+  external_id: string
+}
+
+export interface TradePage {
+  items: Trade[]
+  next_cursor: string | null
+}
+
+export interface Notice {
+  code: string
+  message: string
+}
+
+export interface Integration {
+  provider: string
+  status: 'active' | 'error' | 'disconnected'
+  last_synced_at: string | null
+  warnings: Notice[]
+}
+
+export interface BinanceSyncResult {
+  snapshot_date: string
+  assets: number
+  unpriced_assets: number
+  total_usd: string
+  new_trades: number
+  trades_complete: boolean
+  warnings: Notice[]
+  last_synced_at: string
+}

@@ -151,3 +151,11 @@ export function parseAmountInput(input: string, options: { allowNegative?: boole
   if (negative && toCents(normalized) !== 0n) return `-${normalized}`
   return normalized
 }
+
+/** A quantity of an asset in es-CO: "0,0195" for "0.019540000000"; up to eight decimals, none when whole. */
+export function formatQuantity(value: string): string {
+  const negative = value.startsWith('-')
+  const [whole = '0', fraction = ''] = value.replace('-', '').split('.')
+  const decimals = fraction.slice(0, 8).replace(/0+$/, '')
+  return `${negative ? '-' : ''}${groupThousands(whole)}${decimals ? `,${decimals}` : ''}`
+}

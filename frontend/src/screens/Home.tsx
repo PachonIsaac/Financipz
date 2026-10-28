@@ -176,6 +176,33 @@ function RefreshResultText({ result }: { result: RefreshResult }) {
   )
 }
 
+function CryptoCard() {
+  const wealth = useWealth()
+  const crypto = wealth.data?.crypto
+  if (!crypto?.value_usd) return null
+  return (
+    <Link
+      to="/crypto"
+      aria-label="Cripto"
+      className="flex min-h-[72px] items-center gap-3 rounded-3xl border border-slate-800 bg-slate-900 px-4 active:bg-slate-800"
+    >
+      <IconChip icon={accountIcon('exchange')} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] text-slate-400">Cripto · fuera del balance</p>
+        <p className="text-lg font-semibold">
+          <Amount value={crypto.value_usd} currency="USD" tone="neutral" />
+          {crypto.value_cop ? (
+            <span className="ml-2 text-sm font-normal text-slate-400">
+              ≈ <Amount value={crypto.value_cop} currency="COP" tone="neutral" compact />
+            </span>
+          ) : null}
+        </p>
+      </div>
+      <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
+    </Link>
+  )
+}
+
 function RateLine({ rate }: { rate: { value: string; date: string } | null | undefined }) {
   if (!rate) return null
   return (
@@ -219,6 +246,9 @@ export function HomeScreen() {
         {refresh.isError ? <ErrorState error={refresh.error} /> : null}
         <ErrorBoundary label="No se pudo mostrar el balance.">
           <BalanceCard />
+        </ErrorBoundary>
+        <ErrorBoundary quiet>
+          <CryptoCard />
         </ErrorBoundary>
         <ErrorBoundary label="No se pudo mostrar el resumen del mes.">
           <MonthSummaryCard />

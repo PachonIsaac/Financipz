@@ -25,6 +25,8 @@ export const keys = {
   transactions: ['transactions'] as const,
   identifiers: (accountId: string) => ['identifiers', accountId] as const,
   wealth: ['wealth'] as const,
+  crypto: ['crypto'] as const,
+  integrations: ['integrations'] as const,
   summary: (month: string) => ['summary', month] as const,
 }
 
@@ -204,4 +206,60 @@ export function useRefreshData() {
     // Even a partial failure may have stored new data.
     onSettled: () => refreshMoney(client),
   })
+}
+
+export function usePortfolio() {
+  const api = useApi()
+  return useQuery({ queryKey: [...keys.crypto, 'portfolio'], queryFn: () => api.getPortfolio() })
+}
+
+export function useCryptoHistory(from: string) {
+  const api = useApi()
+  return useQuery({ queryKey: [...keys.crypto, 'history', from], queryFn: () => api.getCryptoHistory(from) })
+}
+
+export function useTrades() {
+  const api = useApi()
+  return useInfiniteQuery({
+    queryKey: [...keys.crypto, 'trades'],
+    queryFn: ({ pageParam }) => api.listTrades(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.next_cursor ?? undefined,
+  })
+}
+
+export function useIntegrations() {
+  const api = useApi()
+  return useQuery({ queryKey: keys.integrations, queryFn: () => api.listIntegrations() })
+}
+
+/** What a connection change or a read of the exchange can alter. */
+function refreshExchange(client: QueryClient): Promise<unknown> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: keys.crypto }),
+    client.invalidateQueries({ queryKey: keys.integrations }),
+    client.invalidateQueries({ queryKey: keys.wealth }),
+    client.invalidateQueries({ queryKey: keys.accounts }),
+  ])
+}
+
+export function useConnectBinance() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ apiKey, apiSecret }: { apiKey: string; apiSecret: string }) => api.connectBinance(apiKey, apiSecret),
+    onSuccess: () => refreshExchange(client),
+  })
+}
+
+export function useDisconnectBinance() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({ mutationFn: () => api.disconnectBinance(), onSuccess: () => refreshExchange(client) })
+}
+
+export function useSyncBinance() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({ mutationFn: () => api.syncBinance(), onSettled: () => refreshExchange(client) })
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMoney, formatRate, fromCents, isPositive, parseAmountInput, sumCents, toCents } from './money'
+import { formatMoney, formatQuantity, formatRate, fromCents, isPositive, parseAmountInput, sumCents, toCents } from './money'
 
 describe('toCents / fromCents', () => {
   it('converts decimal strings to integer cents and back', () => {
@@ -149,5 +149,15 @@ describe('formatMoney compact', () => {
     expect(formatMoney('999999.00', 'COP', { compact: true })).toBe('$ 999.999')
     expect(formatMoney('3200000.00', 'USD', { compact: true })).toBe('US$ 3.200.000,00')
     expect(formatMoney('3200000.00', 'COP', { compact: true, exact: true })).toBe('$ 3.200.000,00')
+  })
+})
+
+describe('formatQuantity', () => {
+  it('trims trailing zeros and groups thousands', () => {
+    expect(formatQuantity('0.019540000000')).toBe('0,01954')
+    expect(formatQuantity('136.099471450000')).toBe('136,09947145')
+    expect(formatQuantity('1500')).toBe('1.500')
+    expect(formatQuantity('2.000000')).toBe('2')
+    expect(formatQuantity('-0.05')).toBe('-0,05')
   })
 })
