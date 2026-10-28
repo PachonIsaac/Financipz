@@ -51,6 +51,7 @@ class WealthAccount(Output):
     type: AccountType
     currency: Currency
     archived: bool
+    include_in_balance: bool
     # In the account's own currency; can be negative.
     balance: Cents
     # Null for exchange and system accounts when no rate could value them.

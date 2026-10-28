@@ -28,12 +28,13 @@ class AccountCreate(Input):
     # Person the money was lent to. Only for loan accounts.
     counterparty: Name | None = None
     key: AccountKey | None = None
+    include_in_balance: bool = True
 
 
 class AccountUpdate(PartialUpdate):
     """The currency cannot change. Send key or counterparty as null to clear them."""
 
-    required_when_sent = frozenset({"name", "type", "initial_balance", "archived"})
+    required_when_sent = frozenset({"name", "type", "initial_balance", "archived", "include_in_balance"})
 
     name: Name | None = None
     type: AccountType | None = None
@@ -41,6 +42,7 @@ class AccountUpdate(PartialUpdate):
     counterparty: Name | None = None
     key: AccountKey | None = None
     archived: bool | None = None
+    include_in_balance: bool | None = None
 
 
 class AccountOut(Output):
@@ -52,6 +54,8 @@ class AccountOut(Output):
     counterparty: str | None
     key: str | None
     archived: bool
+    # False when the balance is left out of the available money, the card debt and the loans.
+    include_in_balance: bool
     # Initial balance plus confirmed movements, in the account's own currency. Can be negative.
     balance: Decimal
 

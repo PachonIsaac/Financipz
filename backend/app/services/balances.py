@@ -65,6 +65,7 @@ def to_domain_account(row: models.Account) -> domain.Account:
         currency=domain.Currency(row.currency),
         initial_balance=row.initial_balance,
         archived=row.archived,
+        include_in_balance=row.include_in_balance,
     )
 
 

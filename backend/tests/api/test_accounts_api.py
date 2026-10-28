@@ -236,3 +236,20 @@ def test_repeated_digits_in_one_request_are_rejected(client):
 
     assert response.status_code == 422
     assert error_code(response) == "duplicate_identifier"
+
+
+def test_accounts_count_toward_the_balance_by_default_and_can_be_left_out(client):
+    account = create_account(client)
+    assert account["include_in_balance"] is True
+
+    response = client.patch(f"{API}/accounts/{account['id']}", json={"include_in_balance": False})
+
+    assert response.status_code == 200
+    assert response.json()["include_in_balance"] is False
+    assert client.patch(f"{API}/accounts/{account['id']}", json={"include_in_balance": None}).status_code == 422
+
+
+def test_an_account_can_be_created_outside_the_balance(client):
+    account = create_account(client, include_in_balance=False)
+
+    assert account["include_in_balance"] is False

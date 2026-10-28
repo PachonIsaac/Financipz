@@ -70,6 +70,21 @@ def test_exchange_and_system_accounts_are_left_out():
     assert result.real_money == D("1000")
 
 
+def test_accounts_left_out_of_the_balance_count_nowhere():
+    bank = make_account()
+    savings = make_account(AccountType.SAVINGS, include_in_balance=False)
+    card = make_account(AccountType.CREDIT_CARD, include_in_balance=False)
+    loan = make_account(AccountType.LOAN, include_in_balance=False)
+    balances = {bank.id: D("1000"), savings.id: D("500"), card.id: D("-300"), loan.id: D("200")}
+
+    result = wealth([bank, savings, card, loan], balances)
+
+    assert result.available == D("1000")
+    assert result.credit_card_debt == 0
+    assert result.receivable_loans == 0
+    assert result.real_money == D("1000")
+
+
 def test_foreign_currency_balances_are_valued_with_the_rate_of_the_day():
     savings_usd = make_account(AccountType.SAVINGS, Currency.USD)
     card_usd = make_account(AccountType.CREDIT_CARD, Currency.USD)

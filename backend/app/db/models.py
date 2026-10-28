@@ -70,6 +70,8 @@ class Account(Base):
     # Balances may be negative (for example, a credit card whose debt exceeds payments).
     initial_balance: Mapped[Decimal] = mapped_column(MONEY, server_default=text("0"))
     archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # Whether the balance counts toward the available money, the card debt and the loans.
+    include_in_balance: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
 
 
 class AccountIdentifier(Base):

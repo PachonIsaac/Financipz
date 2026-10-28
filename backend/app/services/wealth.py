@@ -61,6 +61,7 @@ def current_wealth(db: Session) -> WealthOut:
             type=row.type,
             currency=row.currency,
             archived=row.archived,
+            include_in_balance=row.include_in_balance,
             balance=balances[row.id],
             balance_cop=values[row.id],
         )

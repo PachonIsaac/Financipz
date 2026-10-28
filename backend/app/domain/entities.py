@@ -55,6 +55,7 @@ class Account:
     currency: Currency
     initial_balance: Decimal = Decimal("0")
     archived: bool = False
+    include_in_balance: bool = True
 
 
 @dataclass(frozen=True)

@@ -40,7 +40,7 @@ def compute_wealth(
     - Available: cash, bank, savings and wallet accounts.
     - Credit card debt: cards with a negative balance. A card with a positive balance adds nothing.
     - Receivable loans: loan accounts, shown apart and never part of real money.
-    - Exchange and system accounts are left out.
+    - Exchange and system accounts are left out, and so is any account the user took out of the balance.
 
     Archived accounts still count while they hold money, so a balance cannot vanish by archiving.
     """
@@ -50,6 +50,8 @@ def compute_wealth(
 
     for account in accounts:
         if account.archived and not include_archived:
+            continue
+        if not account.include_in_balance:
             continue
 
         value = fx.to_cop(balances[account.id], account.currency, on)

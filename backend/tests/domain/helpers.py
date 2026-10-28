@@ -23,6 +23,7 @@ def make_account(
     currency: Currency = Currency.COP,
     initial: str | int = 0,
     archived: bool = False,
+    include_in_balance: bool = True,
 ) -> Account:
     return Account(
         id=uuid.uuid4(),
@@ -30,6 +31,7 @@ def make_account(
         currency=currency,
         initial_balance=D(str(initial)),
         archived=archived,
+        include_in_balance=include_in_balance,
     )
 
 

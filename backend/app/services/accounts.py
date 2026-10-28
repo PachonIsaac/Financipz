@@ -33,6 +33,7 @@ def to_out(row: models.Account, balance: Decimal) -> AccountOut:
         counterparty=row.counterparty,
         key=row.key,
         archived=row.archived,
+        include_in_balance=row.include_in_balance,
         balance=balance,
     )
 
@@ -70,6 +71,7 @@ def create_account(db: Session, data: AccountCreate) -> AccountOut:
         counterparty=data.counterparty,
         key=data.key,
         archived=False,
+        include_in_balance=data.include_in_balance,
     )
     db.add(row)
     _commit(db)

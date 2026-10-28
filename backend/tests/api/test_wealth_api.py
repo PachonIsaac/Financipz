@@ -221,3 +221,20 @@ def test_crypto_block_uses_the_rate_of_the_snapshot_day_not_todays(client, db):
     body = wealth(client)
 
     assert body["crypto"]["value_cop"] == "40000.00"
+
+
+def test_accounts_left_out_of_the_balance_do_not_count(client):
+    create_account(client, name="Bank", type="bank", initial=400_000)
+    left_out = create_account(client, name="Savings", type="savings", initial=300_000)
+    card = create_account(client, name="Card", type="credit_card", include_in_balance=False)
+    create_transaction(client, card, "expense", 50_000)
+    client.patch(f"{API}/accounts/{left_out['id']}", json={"include_in_balance": False})
+
+    body = wealth(client)
+
+    assert body["available"] == "400000.00"
+    assert body["credit_card_debt"] == "0.00"
+    listed = {item["name"]: item for item in body["accounts"]}
+    assert listed["Savings"]["include_in_balance"] is False
+    assert listed["Savings"]["balance"] == "300000.00"
+    assert listed["Bank"]["include_in_balance"] is True
