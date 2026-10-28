@@ -4,7 +4,7 @@ import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useTransactionList } from '../api/hooks'
 import { OfflineBanner } from './states'
 
-const TAB_BASE = 'relative flex h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-[28px] text-[11px] leading-[13px]'
+const TAB_BASE = 'relative flex h-14 flex-1 items-center justify-center rounded-[28px]'
 const TAB_IDLE = 'text-[#c9c9cf] font-medium'
 const TAB_ACTIVE = 'glass-active text-emerald-400 font-semibold'
 
@@ -22,13 +22,16 @@ function Tab({
   badge?: string | undefined
 }) {
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => `${TAB_BASE} ${isActive ? TAB_ACTIVE : TAB_IDLE}`}>
-      <Icon aria-hidden="true" size={24} strokeWidth={1.9} />
-      <span>{label}</span>
+    <NavLink
+      to={to}
+      end={end}
+      aria-label={badge ? `${label}, ${badge} pendientes` : label}
+      className={({ isActive }) => `${TAB_BASE} ${isActive ? TAB_ACTIVE : TAB_IDLE}`}
+    >
+      <Icon aria-hidden="true" size={26} strokeWidth={1.9} />
       {badge ? (
-        <span className="absolute top-0.5 right-3 min-w-[18px] rounded-full bg-emerald-500 px-1 text-center text-[11px] leading-[18px] font-bold text-slate-950">
+        <span aria-hidden="true" className="absolute top-0.5 right-3 min-w-[18px] rounded-full bg-emerald-500 px-1 text-center text-[11px] leading-[18px] font-bold text-slate-950">
           {badge}
-          <span className="sr-only"> pendientes</span>
         </span>
       ) : null}
     </NavLink>
