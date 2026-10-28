@@ -12,7 +12,8 @@ from app.core.crypto import decrypt_json
 from app.db import models
 from app.integrations import gmail
 from app.main import app
-from app.services import integrations, refresh
+from app.integrations.gmail import _text_of
+from app.services import gmail_sync, integrations, refresh
 from tests.api.google_fake import ALLOWED, FakeGoogle, html_message, kind_of, plain_message
 from tests.api.helpers import API, create_account, error_code
 from tests.api.test_ingest import FAILED, PURCHASE, with_digits
@@ -213,6 +214,97 @@ def test_the_refresh_reads_the_mail_too_and_reports_it_apart(client, db, connect
 
 
 def test_the_refresh_does_not_fail_when_the_mail_is_not_connected(client, google):
+    body = client.post(f"{API}/refresh").json()
+
+    assert body["gmail"]["status"] == "not_connected"
+
+
+def test_a_long_backlog_is_read_in_several_goes_without_losing_any_message(client, db, connected, monkeypatch):
+    monkeypatch.setattr(gmail_sync, "MAX_FETCHED_PER_SYNC", 3)
+    card = with_digits(client, create_account(client, name="Card", type="credit_card"), "1234")
+    # Newest first, as the provider lists them: m7 is the newest, m1 the oldest. Each has its own amount.
+    connected.messages = {
+        f"m{n}": plain_message(PURCHASE.replace("12.300,00", f"{n}.000,00")) for n in range(7, 0, -1)
+    }
+
+    first = client.post(f"{API}/integrations/gmail/sync").json()
+    assert (first["processed"], first["more"]) == (3, True)
+    # The oldest were read first and the clock did not move, so nothing is skipped.
+    assert integrations.get_row(db, "gmail").last_synced_at is None
+    assert sorted(str(row.amount) for row in db.scalars(select(models.Transaction))) == ["1000.00", "2000.00", "3000.00"]
+
+    second = client.post(f"{API}/integrations/gmail/sync").json()
+    third = client.post(f"{API}/integrations/gmail/sync").json()
+
+    assert (second["processed"], second["more"], third["processed"], third["more"]) == (3, True, 1, False)
+    assert integrations.get_row(db, "gmail").last_synced_at is not None
+    assert len(list(db.scalars(select(models.Transaction)))) == 7
+    assert card["id"]
+
+
+def test_listing_follows_the_pages_of_the_provider(client, db, connected):
+    connected.messages = {f"m{n}": plain_message("sin plantilla") for n in range(250)}
+
+    body = client.post(f"{API}/integrations/gmail/sync").json()
+
+    # 250 messages need three pages; only 100 are fetched each time and the rest wait.
+    assert (body["processed"], body["more"]) == (100, True)
+    assert len([q for q in connected.queries()]) == 3
+
+
+def test_a_message_that_only_claims_to_come_from_the_bank_is_not_read(client, db, connected):
+    with_digits(client, create_account(client, name="Card", type="credit_card"), "1234")
+    connected.messages = {
+        "spoof": plain_message(PURCHASE, sender="evil@elsewhere.test"),
+        "real": plain_message(PURCHASE.replace("12.300,00", "7.000,00")),
+    }
+    # A display name that looks like the bank, with another address behind it.
+    connected.messages["spoof"]["payload"]["headers"][0]["value"] = "alertasynotificaciones@bancolombia.com.co <evil@elsewhere.test>"
+
+    body = client.post(f"{API}/integrations/gmail/sync").json()
+
+    assert (body["created"], body["ignored"]) == (1, 1)
+    assert [str(row.amount) for row in db.scalars(select(models.Transaction))] == ["7000.00"]
+
+
+def test_hostile_markup_is_read_in_linear_time():
+    from app.integrations import gmail as module
+    from tests.api.google_fake import b64
+
+    nasty = "<script<" * 400_000 + "<<<<<" * 200_000 + " Compraste COP1,00 "
+    started = time.monotonic()
+    text = _text_of({"mimeType": "text/html", "body": {"data": b64(nasty)}})
+
+    assert time.monotonic() - started < 3
+    assert len(text) <= module.MAX_BODY_CHARS
+
+
+def test_a_state_works_once_and_must_have_been_issued_here(client, db, google):
+    state = oauth_state.make(KEY)
+    first = client.get(CALLBACK, params={"code": "good-code", "state": state}, follow_redirects=False)
+    replay = client.get(CALLBACK, params={"code": "good-code", "state": state}, follow_redirects=False)
+    forged = client.get(
+        CALLBACK,
+        params={"code": "good-code", "state": oauth_state.make(KEY).split(".")[0] + ".AAAA"},
+        follow_redirects=False,
+    )
+
+    assert first.headers["location"].endswith("connected=1")
+    assert replay.headers["location"].endswith("error=invalid_state")
+    assert forged.headers["location"].endswith("error=invalid_state")
+
+
+def test_connecting_again_withdraws_the_previous_permission(client, db, connected):
+    connected.refresh_token = "second-token"
+    connect_with_callback(client)
+
+    assert connected.revoked == ["refresh-token-value"]
+    assert decrypt_json(KEY, integrations.get_row(db, "gmail").encrypted_secret) == {"refresh_token": "second-token"}
+
+
+def test_the_refresh_does_not_call_a_missing_provider_setting_an_error(client, db, connected):
+    app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, encryption_key=KEY)
+
     body = client.post(f"{API}/refresh").json()
 
     assert body["gmail"]["status"] == "not_connected"

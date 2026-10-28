@@ -7,7 +7,6 @@ that text can quote tokens.
 
 import base64
 import html
-import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from urllib.parse import urlencode
@@ -22,6 +21,8 @@ SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 TIMEOUT_SECONDS = 20
 # Only the start of a body is read: notifications are short, and the text comes from outside.
 MAX_BODY_CHARS = 100_000
+# Messages listed per page, and the most that are listed in one read.
+PAGE_SIZE = 100
 
 # Kinds of failure.
 REVOKED = "revoked"  # the person withdrew the permission, or the grant expired
@@ -160,12 +161,24 @@ class GmailClient:
             raise GmailError(REJECTED)
         return _json(response)
 
-    def list_message_ids(self, query: str, limit: int) -> list[str]:
-        body = self._get("/messages", {"q": query, "maxResults": limit})
-        items = body.get("messages", [])
-        if not isinstance(items, list):
-            raise GmailError(BAD_RESPONSE)
-        return [item["id"] for item in items if isinstance(item, dict) and isinstance(item.get("id"), str)]
+    def list_message_ids(self, query: str, limit: int) -> tuple[list[str], bool]:
+        """Up to `limit` ids, newest first, following the pages. The flag says whether there were more."""
+        ids: list[str] = []
+        token: str | None = None
+        while True:
+            params: dict[str, str | int] = {"q": query, "maxResults": min(PAGE_SIZE, limit - len(ids) + 1)}
+            if token:
+                params["pageToken"] = token
+            body = self._get("/messages", params)
+            items = body.get("messages", [])
+            if not isinstance(items, list):
+                raise GmailError(BAD_RESPONSE)
+            ids.extend(item["id"] for item in items if isinstance(item, dict) and isinstance(item.get("id"), str))
+            token = body.get("nextPageToken") if isinstance(body.get("nextPageToken"), str) else None
+            if len(ids) > limit:
+                return ids[:limit], True
+            if not token:
+                return ids, False
 
     def get_message(self, message_id: str) -> Message:
         body = self._get(f"/messages/{message_id}", {"format": "full"})
@@ -188,21 +201,59 @@ class GmailClient:
 def _decode(data: object) -> str:
     if not isinstance(data, str):
         return ""
+    # Only the start is decoded: the body comes from outside, and the rest is never read.
+    data = data[: MAX_BODY_CHARS * 2]
     try:
         return base64.urlsafe_b64decode(data + "=" * (-len(data) % 4)).decode("utf-8", errors="replace")
     except ValueError:
         return ""
 
 
-def _parts(payload: dict) -> list[dict]:
+def _parts(payload: dict, depth: int = 0) -> list[dict]:
     found = [payload]
+    if depth >= 8:
+        return found
     for child in payload.get("parts", []) or []:
         if isinstance(child, dict):
-            found.extend(_parts(child))
+            found.extend(_parts(child, depth + 1))
     return found
 
 
-_TAGS = re.compile(r"<(script|style)\b.*?</\1>|<[^>]+>", re.IGNORECASE | re.DOTALL)
+def _strip_markup(markup: str) -> str:
+    """The text of an HTML document, without its tags, scripts and styles.
+
+    Written as one pass that always moves forward: the parsers of the standard library take quadratic time on
+    crafted input (an opened tag that never closes), and this text comes from outside.
+    """
+    lowered = markup.lower()
+    out: list[str] = []
+    i, n = 0, len(markup)
+    while i < n:
+        start = markup.find("<", i)
+        if start == -1:
+            out.append(markup[i:])
+            break
+        out.append(markup[i:start])
+        if markup.startswith("<!--", start):
+            end = markup.find("-->", start + 4)
+            i = n if end == -1 else end + 3
+            continue
+        closing = None
+        for tag in ("script", "style"):
+            if lowered.startswith("<" + tag, start):
+                closing = f"</{tag}"
+                break
+        if closing is not None:
+            end = lowered.find(closing, start)
+            end = -1 if end == -1 else markup.find(">", end)
+            i = n if end == -1 else end + 1
+            continue
+        end = markup.find(">", start + 1)
+        if end == -1:
+            break
+        out.append(" ")
+        i = end + 1
+    return html.unescape("".join(out))
 
 
 def _text_of(payload: dict) -> str:
@@ -215,5 +266,5 @@ def _text_of(payload: dict) -> str:
             plain = data
         elif kind == "text/html" and not rich:
             rich = data
-    text = plain or html.unescape(_TAGS.sub(" ", rich))
+    text = plain or _strip_markup(rich)
     return " ".join(text.split())[:MAX_BODY_CHARS]

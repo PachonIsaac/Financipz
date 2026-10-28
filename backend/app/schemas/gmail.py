@@ -15,4 +15,6 @@ class GmailSyncOut(Output):
     duplicates: int
     ignored: int
     unrecognized: int
-    last_synced_at: dt.datetime
+    last_synced_at: dt.datetime | None
+    # True when there were more messages than one read takes. Reading again continues.
+    more: bool

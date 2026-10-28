@@ -39,12 +39,13 @@ def receive(
     201 created, 409 already stored, 200 recognized but not a movement, 422 not recognized. The token is the
     only credential and it opens nothing else.
     """
-    if not requests_limit.allow():
-        raise _too_many(requests_limit)
     if not tokens.verify(db, ingest_token):
         if not failures_limit.allow():
             raise _too_many(failures_limit)
         raise ApiError(401, "invalid_ingest_token", "El token de ingesta no es válido.")
+    # Only requests with the right token use up this limit, so nobody can spend it for the real shortcut.
+    if not requests_limit.allow():
+        raise _too_many(requests_limit)
 
     result = pipeline.ingest(db, parse_uala_sms(body.text, body.received_at))
     match result.outcome:

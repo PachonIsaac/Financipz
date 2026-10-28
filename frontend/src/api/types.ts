@@ -319,5 +319,7 @@ export interface GmailSyncResult {
   duplicates: number
   ignored: number
   unrecognized: number
-  last_synced_at: string
+  last_synced_at: string | null
+  /** True when there were more messages than one read takes: reading again continues. */
+  more: boolean
 }

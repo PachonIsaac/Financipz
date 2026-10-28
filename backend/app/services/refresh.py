@@ -177,7 +177,7 @@ NOT_CONNECTED_CODES = frozenset({"integration_not_connected", "credentials_remov
 
 def _gmail_step(open_session: SessionFactory, settings: Settings | None) -> Step:
     def read() -> Step | None:
-        if settings is None:
+        if settings is None or not (settings.google_client_id and settings.google_client_secret and settings.google_redirect_uri):
             return Step("not_connected", "gmail_not_configured", "La lectura del correo no está configurada.")
         with open_session() as db:
             row = integrations.get_row(db, gmail_sync.GMAIL)

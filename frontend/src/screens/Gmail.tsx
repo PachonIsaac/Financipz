@@ -25,6 +25,7 @@ function SyncSummary({ result }: { result: GmailSyncResult }) {
       <li>Movimientos nuevos para revisar: {result.created}.</li>
       {result.ignored > 0 ? <li>Avisos que no son movimientos: {result.ignored}.</li> : null}
       {result.unrecognized > 0 ? <li>Correos que no se reconocieron: {result.unrecognized}.</li> : null}
+      {result.more ? <li className="text-amber-300">Hay más correos por leer: vuelve a pulsar «Leer ahora».</li> : null}
     </ul>
   )
 }

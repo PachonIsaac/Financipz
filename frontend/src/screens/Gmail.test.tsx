@@ -36,7 +36,7 @@ describe('mail connection', () => {
   })
 
   it('reads the mail and says what happened to the messages', async () => {
-    const syncGmail = vi.fn(async () => ({ processed: 5, created: 2, duplicates: 0, ignored: 2, unrecognized: 1, last_synced_at: '2026-10-28T21:00:00Z' }))
+    const syncGmail = vi.fn(async () => ({ processed: 5, created: 2, duplicates: 0, ignored: 2, unrecognized: 1, last_synced_at: '2026-10-28T21:00:00Z', more: true }))
     setup(connected, { syncGmail })
 
     await userEvent.click(await screen.findByRole('button', { name: 'Leer ahora' }))
@@ -45,10 +45,11 @@ describe('mail connection', () => {
     expect(screen.getByText('Movimientos nuevos para revisar: 2.')).toBeInTheDocument()
     expect(screen.getByText('Avisos que no son movimientos: 2.')).toBeInTheDocument()
     expect(screen.getByText('Correos que no se reconocieron: 1.')).toBeInTheDocument()
+    expect(screen.getByText(/Hay más correos por leer/)).toBeInTheDocument()
   })
 
   it('says so when there is nothing new', async () => {
-    setup(connected, { syncGmail: vi.fn(async () => ({ processed: 0, created: 0, duplicates: 0, ignored: 0, unrecognized: 0, last_synced_at: '2026-10-28T21:00:00Z' })) })
+    setup(connected, { syncGmail: vi.fn(async () => ({ processed: 0, created: 0, duplicates: 0, ignored: 0, unrecognized: 0, last_synced_at: '2026-10-28T21:00:00Z', more: false })) })
 
     await userEvent.click(await screen.findByRole('button', { name: 'Leer ahora' }))
 

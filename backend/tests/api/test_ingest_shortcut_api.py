@@ -123,3 +123,12 @@ def test_a_runaway_shortcut_is_limited(client, token, monkeypatch):
     codes = [send(client, token).status_code for _ in range(5)]
 
     assert codes[3:] == [429, 429]
+
+
+def test_junk_requests_cannot_use_up_the_limit_of_the_real_shortcut(client, token, monkeypatch):
+    monkeypatch.setattr(ingest_api, "requests_limit", RateLimiter(limit=3, window=60))
+
+    for _ in range(20):
+        send(client, "fzi_junk")
+
+    assert send(client, token).status_code != 429

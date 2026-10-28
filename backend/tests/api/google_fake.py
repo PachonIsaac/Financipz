@@ -89,7 +89,13 @@ class FakeGoogle:
             return httpx.Response(401, json={"error": {"code": 401}})
         if path == "/gmail/v1/users/me/messages":
             ids = list(self.messages)
-            return httpx.Response(200, json={"messages": [{"id": item, "threadId": item} for item in ids]} if ids else {})
+            size = int(request.url.params.get("maxResults", "100"))
+            start = int(request.url.params.get("pageToken", "0"))
+            page = ids[start : start + size]
+            body: dict = {"messages": [{"id": item, "threadId": item} for item in page]} if page else {}
+            if start + size < len(ids):
+                body["nextPageToken"] = str(start + size)
+            return httpx.Response(200, json=body)
         message_id = path.rsplit("/", 1)[-1]
         if path.startswith("/gmail/v1/users/me/messages/") and message_id in self.messages:
             return httpx.Response(200, json=self.messages[message_id])
