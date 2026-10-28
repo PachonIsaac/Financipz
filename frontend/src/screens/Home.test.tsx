@@ -83,9 +83,11 @@ describe('home screen', () => {
 
   it('shows month totals and category breakdown', async () => {
     renderWithApp(<HomeScreen />, { api: base() })
-    expect(await screen.findByText('+$ 3.000.000')).toBeInTheDocument()
+    // The three month tiles show millions in short form; the category card keeps the whole amount.
+    expect(await screen.findByText('+$ 3 M')).toBeInTheDocument()
+    expect(screen.getByText('-$ 1,2 M')).toBeInTheDocument()
+    expect(screen.getByText('$ 1,8 M')).toBeInTheDocument()
     expect(screen.getAllByText('-$ 1.200.000').length).toBeGreaterThan(0)
-    expect(screen.getByText('$ 1.800.000')).toBeInTheDocument()
     expect(screen.getByText('Gasto por categoría')).toBeInTheDocument()
     expect(screen.getByText('Sin categoría')).toBeInTheDocument()
   })

@@ -9,6 +9,7 @@ export function Amount({
   currency,
   exact = false,
   showPlus = false,
+  compact = false,
   tone = 'auto',
   className = '',
 }: {
@@ -16,6 +17,7 @@ export function Amount({
   currency: Currency
   exact?: boolean
   showPlus?: boolean
+  compact?: boolean
   tone?: Tone
   className?: string
 }) {
@@ -27,7 +29,7 @@ export function Amount({
   }
   return (
     <span className={`tabular whitespace-nowrap ${color} ${className}`}>
-      {formatMoney(value, currency, { exact, showPlus })}
+      {formatMoney(value, currency, { exact, showPlus, compact })}
     </span>
   )
 }

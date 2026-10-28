@@ -112,19 +112,19 @@ function MonthSummaryCard() {
               <div className="rounded-2xl bg-slate-800 px-3 py-2.5">
                 <dt className="text-xs text-slate-400">Ingresos</dt>
                 <dd className="mt-0.5 text-[15px] font-semibold">
-                  <Amount value={data.income} currency="COP" showPlus />
+                  <Amount value={data.income} currency="COP" showPlus compact />
                 </dd>
               </div>
               <div className="rounded-2xl bg-slate-800 px-3 py-2.5">
                 <dt className="text-xs text-slate-400">Gastos</dt>
                 <dd className="mt-0.5 text-[15px] font-semibold">
-                  <Amount value={fromCents(-toCents(data.expenses))} currency="COP" tone="neutral" />
+                  <Amount value={fromCents(-toCents(data.expenses))} currency="COP" tone="neutral" compact />
                 </dd>
               </div>
               <div className="rounded-2xl bg-slate-800 px-3 py-2.5">
                 <dt className="text-xs text-slate-400">Balance</dt>
                 <dd className="mt-0.5 text-[15px] font-semibold text-emerald-500">
-                  <Amount value={data.balance} currency="COP" tone="neutral" />
+                  <Amount value={data.balance} currency="COP" tone="neutral" compact />
                 </dd>
               </div>
             </dl>

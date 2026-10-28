@@ -136,3 +136,18 @@ describe('formatRate', () => {
     expect(() => toCents('3157.9400')).toThrow()
   })
 })
+
+describe('formatMoney compact', () => {
+  it('shows millions with up to two decimals and keeps the sign', () => {
+    expect(formatMoney('3200000.00', 'COP', { compact: true, showPlus: true })).toBe('+$ 3,2 M')
+    expect(formatMoney('-1940000.00', 'COP', { compact: true })).toBe('-$ 1,94 M')
+    expect(formatMoney('2000000.00', 'COP', { compact: true })).toBe('$ 2 M')
+    expect(formatMoney('1005000.00', 'COP', { compact: true })).toBe('$ 1,01 M')
+  })
+
+  it('leaves amounts under a million, dollars and exact views as they are', () => {
+    expect(formatMoney('999999.00', 'COP', { compact: true })).toBe('$ 999.999')
+    expect(formatMoney('3200000.00', 'USD', { compact: true })).toBe('US$ 3.200.000,00')
+    expect(formatMoney('3200000.00', 'COP', { compact: true, exact: true })).toBe('$ 3.200.000,00')
+  })
+})

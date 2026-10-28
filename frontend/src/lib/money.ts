@@ -70,11 +70,23 @@ export interface FormatOptions {
   exact?: boolean
   /** Prefix positive amounts with "+". */
   showPlus?: boolean
+  /** Millions of pesos as "3,2 M" (up to two decimals). Smaller amounts and dollars stay whole. */
+  compact?: boolean
+}
+
+const MILLION_UNITS = 1_000_000n
+
+/** "3,2" for 3.200.000 and "1,94" for 1.940.000: hundredths of a million, without trailing zeros. */
+function inMillions(units: bigint): string {
+  const hundredths = (units + 5_000n) / 10_000n
+  const whole = hundredths / 100n
+  const fraction = (hundredths % 100n).toString().padStart(2, '0').replace(/0$/, '')
+  return fraction === '' || fraction === '0' ? whole.toString() : `${whole},${fraction}`
 }
 
 /**
  * Formats an amount for es-CO: "." for thousands and "," for decimals.
- * COP shows no decimals unless `exact`; USD always shows two. Negatives lead with "-".
+ * COP shows no decimals unless `exact` (or millions with `compact`); USD always shows two. Negatives lead with "-".
  */
 export function formatMoney(value: string, currency: Currency, options: FormatOptions = {}): string {
   const cents = toCents(value)
@@ -90,7 +102,8 @@ export function formatMoney(value: string, currency: Currency, options: FormatOp
   } else {
     const units = roundToUnits(cents)
     const abs = units < 0n ? -units : units
-    body = groupThousands(abs.toString())
+    body =
+      options.compact && abs >= MILLION_UNITS ? `${inMillions(abs)} M` : groupThousands(abs.toString())
     isZero = abs === 0n
   }
   const sign = negative && !isZero ? '-' : options.showPlus && !isZero && !negative ? '+' : ''
