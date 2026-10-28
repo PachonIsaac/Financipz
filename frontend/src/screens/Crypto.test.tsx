@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Portfolio, Trade } from '../api/types'
@@ -71,14 +71,27 @@ describe('crypto screen', () => {
     expect(screen.getByRole('table', { name: 'Valor del portafolio en dólares por día' })).toBeInTheDocument()
   })
 
-  it('lists trades and loads the next page with the cursor', async () => {
-    const { listTrades } = setup()
+  it('shows the last five trades and all of them after asking for more', async () => {
+    const many = Array.from({ length: 7 }, (_, index) => trade(`t${index}`, index % 2 === 0 ? 'buy' : 'sell'))
+    const listTrades = vi.fn(async (cursor?: string) =>
+      cursor ? { items: many.slice(5), next_cursor: null } : { items: many.slice(0, 5), next_cursor: 'next' },
+    )
+    setup({ listTrades: listTrades as never })
+
+    expect((await screen.findAllByText(/^(Compra|Venta) BTCUSDT$/)).length).toBe(5)
+    await userEvent.click(screen.getByRole('button', { name: 'Ver más' }))
+
+    await waitFor(() => expect(screen.getAllByText(/^(Compra|Venta) BTCUSDT$/).length).toBe(7))
+    expect(listTrades).toHaveBeenLastCalledWith('next')
+    await userEvent.click(await screen.findByRole('button', { name: 'Ver menos' }))
+    expect(screen.getAllByText(/^(Compra|Venta) BTCUSDT$/).length).toBe(5)
+  })
+
+  it('offers no "Ver más" when there are no more than five trades', async () => {
+    setup({ listTrades: vi.fn(async () => ({ items: [trade('t1', 'buy')], next_cursor: null })) as never })
 
     expect(await screen.findByText('Compra BTCUSDT')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Cargar más' }))
-
-    expect(await screen.findByText('Venta BTCUSDT')).toBeInTheDocument()
-    expect(listTrades).toHaveBeenLastCalledWith('next')
+    expect(screen.queryByRole('button', { name: 'Ver más' })).not.toBeInTheDocument()
   })
 
   it('explains what to do when the exchange has never been read', async () => {

@@ -188,7 +188,7 @@ function CryptoCard() {
     >
       <IconChip icon={accountIcon('exchange')} />
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] text-slate-400">Cripto · fuera del balance</p>
+        <p className="text-[13px] text-slate-400">Cripto</p>
         <p className="text-lg font-semibold">
           <Amount value={crypto.value_usd} currency="USD" tone="neutral" />
           {crypto.value_cop ? (
@@ -247,9 +247,6 @@ export function HomeScreen() {
         <ErrorBoundary label="No se pudo mostrar el balance.">
           <BalanceCard />
         </ErrorBoundary>
-        <ErrorBoundary quiet>
-          <CryptoCard />
-        </ErrorBoundary>
         <ErrorBoundary label="No se pudo mostrar el resumen del mes.">
           <MonthSummaryCard />
         </ErrorBoundary>
@@ -301,7 +298,9 @@ export function HomeScreen() {
             </ul>
           )}
         </Card>
-
+        <ErrorBoundary quiet>
+          <CryptoCard />
+        </ErrorBoundary>
         <Card className="pb-2">
           <div className="mb-1 flex items-center justify-between">
             <h2 className="text-[17px] font-semibold">Últimos movimientos</h2>

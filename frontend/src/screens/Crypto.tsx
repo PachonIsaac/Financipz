@@ -1,4 +1,5 @@
 import { Link2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCryptoHistory, usePortfolio, useTrades } from '../api/hooks'
 import type { Trade } from '../api/types'
@@ -12,6 +13,8 @@ import { formatDate, formatDateTime, todayLocal } from '../lib/dates'
 import { formatMoney, formatQuantity, formatRate } from '../lib/money'
 
 const HISTORY_DAYS = 30
+// Trades shown until the person asks for all of them.
+const RECENT_TRADES = 5
 
 function historyStart(): string {
   return todayLocal(new Date(Date.now() - HISTORY_DAYS * 86_400_000))
@@ -53,8 +56,16 @@ export function CryptoScreen() {
   const portfolio = usePortfolio()
   const history = useCryptoHistory(historyStart())
   const trades = useTrades()
+  const [showAllTrades, setShowAllTrades] = useState(false)
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = trades
+  // Asking for all of them loads every page, not only the first.
+  useEffect(() => {
+    if (showAllTrades && hasNextPage && !isFetchingNextPage) void fetchNextPage()
+  }, [showAllTrades, hasNextPage, isFetchingNextPage, fetchNextPage])
   const data = portfolio.data
   const tradeRows = trades.data?.pages.flatMap((page) => page.items) ?? []
+  const shownTrades = showAllTrades ? tradeRows : tradeRows.slice(0, RECENT_TRADES)
+  const canExpand = hasNextPage || tradeRows.length > RECENT_TRADES
   const points = (history.data ?? []).map((point) => ({ day: point.date, value: point.total_usd }))
 
   return (
@@ -162,18 +173,18 @@ export function CryptoScreen() {
           <Card className="pb-2">
             <h2 className="mb-1 text-[17px] font-semibold">Operaciones recientes</h2>
             <ul>
-              {tradeRows.map((trade) => (
+              {shownTrades.map((trade) => (
                 <TradeRow key={trade.id} trade={trade} />
               ))}
             </ul>
-            {trades.hasNextPage ? (
+            {canExpand ? (
               <Button
                 variant="secondary"
                 className="my-2 w-full"
-                disabled={trades.isFetchingNextPage}
-                onClick={() => void trades.fetchNextPage()}
+                disabled={showAllTrades && isFetchingNextPage}
+                onClick={() => setShowAllTrades((value) => !value)}
               >
-                {trades.isFetchingNextPage ? 'Cargando…' : 'Cargar más'}
+                {showAllTrades ? (isFetchingNextPage ? 'Cargando…' : 'Ver menos') : 'Ver más'}
               </Button>
             ) : null}
           </Card>
