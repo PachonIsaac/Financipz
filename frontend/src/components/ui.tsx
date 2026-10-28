@@ -132,7 +132,7 @@ export function SelectField({
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
     <section
-      className={`rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 ${className}`}
+      className={`rounded-3xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 ${className}`}
     >
       {children}
     </section>

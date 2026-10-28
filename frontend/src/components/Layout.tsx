@@ -1,39 +1,36 @@
 import type { ReactNode } from 'react'
+import { ChevronLeft, Ellipsis, House, Inbox, List, type LucideIcon, Plus } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useTransactionList } from '../api/hooks'
 import { OfflineBanner } from './states'
 
-const TAB_BASE = 'flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-xs font-medium'
-const TAB_IDLE = 'text-slate-500 dark:text-slate-400'
-const TAB_ACTIVE = 'text-emerald-700 dark:text-emerald-400'
+const TAB_BASE = 'relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium'
+const TAB_IDLE = 'text-slate-500'
+const TAB_ACTIVE = 'text-emerald-500 font-semibold'
 
 function Tab({
   to,
   label,
   end = false,
-  icon,
+  icon: Icon,
   badge,
 }: {
   to: string
   label: string
   end?: boolean
-  icon: string
+  icon: LucideIcon
   badge?: string | undefined
 }) {
   return (
     <NavLink to={to} end={end} className={({ isActive }) => `${TAB_BASE} ${isActive ? TAB_ACTIVE : TAB_IDLE}`}>
-      <span aria-hidden="true" className="text-lg leading-none">
-        {icon}
-      </span>
-      <span>
-        {label}
-        {badge ? (
-          <span className="ml-1 rounded-full bg-amber-500 px-1.5 text-[11px] text-slate-950">
-            {badge}
-            <span className="sr-only"> pendientes</span>
-          </span>
-        ) : null}
-      </span>
+      <Icon aria-hidden="true" size={24} strokeWidth={1.9} />
+      <span>{label}</span>
+      {badge ? (
+        <span className="absolute top-1 right-[calc(50%-24px)] min-w-[18px] rounded-full bg-emerald-500 px-1 text-center text-[11px] leading-[18px] font-bold text-slate-950">
+          {badge}
+          <span className="sr-only"> pendientes</span>
+        </span>
+      ) : null}
     </NavLink>
   )
 }
@@ -50,20 +47,20 @@ export function AppLayout() {
       </main>
       <nav
         aria-label="Navegación principal"
-        className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-800 bg-slate-900/95 pb-[env(safe-area-inset-bottom)] backdrop-blur"
       >
         <div className="mx-auto flex max-w-xl items-center">
-          <Tab to="/" label="Inicio" end icon="⌂" />
-          <Tab to="/movements" label="Movimientos" icon="≡" />
+          <Tab to="/" label="Inicio" end icon={House} />
+          <Tab to="/movements" label="Movimientos" icon={List} />
           <Link
             to="/new"
             aria-label="Registrar movimiento"
-            className="mx-2 -mt-5 flex size-14 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-3xl font-semibold text-slate-950 shadow-lg active:bg-emerald-400"
+            className="mx-2 -mt-5 flex size-14 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-slate-950 shadow-[0_6px_18px_rgba(255,138,61,0.35)] active:bg-emerald-400"
           >
-            <span aria-hidden="true">+</span>
+            <Plus aria-hidden="true" size={26} strokeWidth={2.4} />
           </Link>
-          <Tab to="/review" label="Revisión" icon="✓" badge={first && first.items.length > 0 ? count : undefined} />
-          <Tab to="/more" label="Más" icon="⋯" />
+          <Tab to="/review" label="Revisión" icon={Inbox} badge={first && first.items.length > 0 ? count : undefined} />
+          <Tab to="/more" label="Más" icon={Ellipsis} />
         </div>
       </nav>
     </div>
@@ -88,10 +85,10 @@ export function PageHeader({
             aria-label={back.label}
             className="flex size-11 shrink-0 items-center justify-center rounded-xl text-xl active:bg-slate-200 dark:active:bg-slate-800"
           >
-            <span aria-hidden="true">‹</span>
+            <ChevronLeft aria-hidden="true" size={26} />
           </Link>
         ) : null}
-        <h1 className="truncate text-2xl font-bold">{title}</h1>
+        <h1 className="truncate text-[32px] leading-[38px] font-bold tracking-tight">{title}</h1>
       </div>
       {action}
     </header>

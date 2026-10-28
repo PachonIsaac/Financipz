@@ -23,7 +23,7 @@ export function Amount({
   let color = ''
   if (tone === 'auto') {
     if (cents < 0n) color = 'text-rose-600 dark:text-rose-400'
-    else if (showPlus && cents > 0n) color = 'text-emerald-700 dark:text-emerald-400'
+    else if (showPlus && cents > 0n) color = 'text-income'
   }
   return (
     <span className={`tabular whitespace-nowrap ${color} ${className}`}>
