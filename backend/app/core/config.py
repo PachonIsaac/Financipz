@@ -31,10 +31,24 @@ class Settings(BaseSettings):
     # The exchange refuses requests from some countries, so the deployment that talks to it must run
     # elsewhere. Empty: this process talks to the exchange itself.
     binance_sync_url: str = ""
+    # Reading the mailbox (read-only, OAuth). The redirect address is this API's own callback, registered with
+    # the provider; the app address is where the person lands after allowing access.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = ""
+    app_url: str = "http://localhost:5173/"
+    # Comma-separated addresses the bank's notifications come from.
+    gmail_senders: str = "alertasynotificaciones@bancolombia.com.co,alertasynotificaciones@an.notificacionesbancolombia.com"
+    # How far back the first read goes, in days.
+    gmail_first_sync_days: int = 30
 
     @property
     def origins(self) -> list[str]:
         return split_csv(self.allowed_origins)
+
+    @property
+    def senders(self) -> list[str]:
+        return split_csv(self.gmail_senders)
 
     @property
     def allowed_users(self) -> set[str]:

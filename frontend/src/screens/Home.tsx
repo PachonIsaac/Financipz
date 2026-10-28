@@ -171,6 +171,7 @@ function RefreshResultText({ result }: { result: RefreshResult }) {
     <ul className="-mt-2 mb-4 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-slate-400">
       <li>{stepText('TRM', result.fx_rates, 'actualizada')}</li>
       <li>{stepText('Binance', result.binance, 'actualizado')}</li>
+      {result.gmail ? <li>{stepText('Gmail', result.gmail, 'al día')}</li> : null}
       {result.cached ? <li>Ya estaba al día.</li> : null}
     </ul>
   )

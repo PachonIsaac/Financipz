@@ -15,6 +15,7 @@ class StepOut(Output):
 class RefreshOut(Output):
     fx_rates: StepOut
     binance: StepOut
+    gmail: StepOut
     ran_at: dt.datetime
     # True when the previous result was returned because it was too recent to run again.
     cached: bool

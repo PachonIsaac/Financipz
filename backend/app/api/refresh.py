@@ -21,4 +21,5 @@ def refresh_data(
         settings.refresh_min_interval_seconds,
         binance_sync_url=settings.binance_sync_url,
         authorization=authorization,
+        settings=settings,
     )

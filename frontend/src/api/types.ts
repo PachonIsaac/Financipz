@@ -231,6 +231,7 @@ export interface RefreshStep {
 export interface RefreshResult {
   fx_rates: RefreshStep
   binance: RefreshStep
+  gmail?: RefreshStep
   ran_at: string
   /** True when the previous result was returned because it was too recent to run again. */
   cached: boolean
@@ -309,4 +310,14 @@ export interface ShortcutTokenCreated {
   /** Shown once: it cannot be read again, only replaced. */
   token: string
   created_at: string
+}
+
+export interface GmailSyncResult {
+  /** Messages read now, and what became of them. */
+  processed: number
+  created: number
+  duplicates: number
+  ignored: number
+  unrecognized: number
+  last_synced_at: string
 }

@@ -278,3 +278,28 @@ export function useRotateShortcutToken() {
     onSuccess: () => client.invalidateQueries({ queryKey: keys.shortcutToken }),
   })
 }
+
+/** Reading the mail can add pending movements, which the review inbox and its counter must show. */
+function refreshMail(client: QueryClient): Promise<unknown> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: keys.integrations }),
+    client.invalidateQueries({ queryKey: keys.transactions }),
+  ])
+}
+
+export function useConnectGmail() {
+  const api = useApi()
+  return useMutation({ mutationFn: () => api.connectGmail() })
+}
+
+export function useSyncGmail() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({ mutationFn: () => api.syncGmail(), onSettled: () => refreshMail(client) })
+}
+
+export function useDisconnectGmail() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({ mutationFn: () => api.disconnectGmail(), onSuccess: () => refreshMail(client) })
+}
