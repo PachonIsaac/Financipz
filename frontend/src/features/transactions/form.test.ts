@@ -12,6 +12,7 @@ function account(id: string, currency: 'COP' | 'USD' = 'COP'): Account {
     counterparty: null,
     key: null,
     archived: false,
+    include_in_balance: true,
     balance: '0.00',
   }
 }

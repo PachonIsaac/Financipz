@@ -8,12 +8,13 @@ export interface AccountFormValues {
   initialBalance: string
   counterparty: string
   key: string
+  includeInBalance: boolean
 }
 
-export type AccountFormErrors = Partial<Record<keyof AccountFormValues, string>>
+export type AccountFormErrors = Partial<Record<Exclude<keyof AccountFormValues, 'includeInBalance'>, string>>
 
 export function emptyAccountValues(): AccountFormValues {
-  return { name: '', type: 'bank', currency: 'COP', initialBalance: '', counterparty: '', key: '' }
+  return { name: '', type: 'bank', currency: 'COP', initialBalance: '', counterparty: '', key: '', includeInBalance: true }
 }
 
 export function accountToValues(account: Account): AccountFormValues {
@@ -24,6 +25,7 @@ export function accountToValues(account: Account): AccountFormValues {
     initialBalance: account.initial_balance.replace('.', ','),
     counterparty: account.counterparty ?? '',
     key: account.key ?? '',
+    includeInBalance: account.include_in_balance,
   }
 }
 
@@ -34,6 +36,7 @@ interface Parsed {
   initialBalance: string
   counterparty: string | null
   key: string | null
+  includeInBalance: boolean
 }
 
 export function validateAccountForm(
@@ -67,6 +70,7 @@ export function validateAccountForm(
       initialBalance,
       counterparty: values.type === 'loan' ? counterparty : null,
       key: key ? key.toLowerCase() : null,
+      includeInBalance: values.includeInBalance,
     },
   }
 }
@@ -80,6 +84,7 @@ export function buildAccountCreate(parsed: NonNullable<ReturnType<typeof validat
   }
   if (parsed.counterparty) body.counterparty = parsed.counterparty
   if (parsed.key) body.key = parsed.key
+  if (!parsed.includeInBalance) body.include_in_balance = false
   return body
 }
 
@@ -93,6 +98,7 @@ export function buildAccountUpdate(
   if (parsed.initialBalance !== original.initial_balance) body.initial_balance = parsed.initialBalance
   if (parsed.counterparty !== original.counterparty) body.counterparty = parsed.counterparty
   if (parsed.key !== original.key) body.key = parsed.key
+  if (parsed.includeInBalance !== original.include_in_balance) body.include_in_balance = parsed.includeInBalance
   return body
 }
 

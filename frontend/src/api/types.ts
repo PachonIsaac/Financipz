@@ -35,6 +35,8 @@ export interface Account {
   counterparty: string | null
   key: string | null
   archived: boolean
+  /** False when the balance is left out of the available money, the card debt and the loans. */
+  include_in_balance: boolean
   balance: string
 }
 
@@ -45,6 +47,7 @@ export interface AccountCreate {
   initial_balance?: string
   counterparty?: string | null
   key?: string | null
+  include_in_balance?: boolean
 }
 
 export interface AccountUpdate {
@@ -54,6 +57,7 @@ export interface AccountUpdate {
   counterparty?: string | null
   key?: string | null
   archived?: boolean
+  include_in_balance?: boolean
 }
 
 export type IdentifierType = 'account' | 'debit' | 'credit'
@@ -194,6 +198,7 @@ export interface WealthAccount {
   type: AccountType
   currency: Currency
   archived: boolean
+  include_in_balance: boolean
   balance: string
   balance_cop: string
 }

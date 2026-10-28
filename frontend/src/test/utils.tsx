@@ -67,6 +67,7 @@ export function account(partial: Partial<Account> & { id: string }): Account {
     counterparty: null,
     key: null,
     archived: false,
+    include_in_balance: true,
     balance: '0.00',
     ...partial,
   }

@@ -117,6 +117,22 @@ function AccountForm({ account, onDone }: { account?: Account; onDone: () => voi
         onChange={(e) => set('key', e.target.value)}
         error={errors.key}
       />
+      {account?.type === 'exchange' ? null : (
+        <label className="flex min-h-11 items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-5"
+            checked={values.includeInBalance}
+            onChange={(e) => set('includeInBalance', e.target.checked)}
+          />
+          <span>
+            <span className="block text-base">Incluir en el balance</span>
+            <span className="block text-sm text-slate-600 dark:text-slate-400">
+              Si lo desactivas, esta cuenta no suma al disponible, a la deuda de tarjetas ni a los préstamos.
+            </span>
+          </span>
+        </label>
+      )}
       <FormError error={mutation.error} />
       <Button type="submit" disabled={mutation.isPending}>
         {mutation.isPending ? 'Guardando…' : account ? 'Guardar cambios' : 'Crear cuenta'}
@@ -370,6 +386,7 @@ export function AccountsScreen() {
                   <span className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
                     {ACCOUNT_TYPE_LABELS[account.type]} · {account.currency}
                     {account.archived ? <Badge>Archivada</Badge> : null}
+                    {account.include_in_balance ? null : <Badge>Fuera del balance</Badge>}
                   </span>
                 </span>
                 <Amount value={account.balance} currency={account.currency} className="text-base font-semibold" />
