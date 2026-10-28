@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     refresh_min_interval_seconds: int = 300
     # Serve the interactive API docs and the OpenAPI schema.
     docs_enabled: bool = True
+    # Base URL (ending in /api/v1) of another deployment of this API that reads the exchange for this one.
+    # The exchange refuses requests from some countries, so the deployment that talks to it must run
+    # elsewhere. Empty: this process talks to the exchange itself.
+    binance_sync_url: str = ""
 
     @property
     def origins(self) -> list[str]:

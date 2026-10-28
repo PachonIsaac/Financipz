@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Header, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_db
 from app.schemas.integrations import BinanceConnect, IntegrationOut, SyncOut
-from app.services import binance_sync, integrations as service
+from app.services import binance_sync, integrations as service, remote_sync
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -32,6 +32,12 @@ def disconnect_binance(db: Session = Depends(get_db)):
 
 
 @router.post("/binance/sync", response_model=SyncOut)
-def sync_binance(db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+def sync_binance(
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+    authorization: str | None = Header(None),
+):
     """Read balances and new spot trades from the exchange and store today's snapshot."""
+    if settings.binance_sync_url:
+        return remote_sync.forward_binance_sync(settings.binance_sync_url, authorization)
     return binance_sync.sync_binance(db, settings.encryption_key)

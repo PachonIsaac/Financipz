@@ -18,7 +18,7 @@ from app.core.errors import ApiError
 from app.db import models
 from app.db.session import SessionFactory, session_factory
 from app.domain.periods import local_today
-from app.services import binance_sync, fx_rates, integrations
+from app.services import binance_sync, fx_rates, integrations, remote_sync
 
 log = logging.getLogger(__name__)
 
@@ -44,18 +44,27 @@ class RefreshResult:
     cached: bool = False
 
 
-def run_refresh(open_session: SessionFactory, encryption_key: str, min_interval_seconds: int) -> RefreshResult:
-    """Refresh both sources. Waits if a run is in progress, and reuses a run newer than the interval."""
+def run_refresh(
+    open_session: SessionFactory,
+    encryption_key: str,
+    min_interval_seconds: int,
+    binance_sync_url: str = "",
+    authorization: str | None = None,
+) -> RefreshResult:
+    """Refresh both sources. Waits if a run is in progress, and reuses a run newer than the interval.
+
+    With `binance_sync_url`, the exchange is read by that other deployment, on behalf of the same user.
+    """
     with _lock:
         if _last is not None and time.monotonic() - _last[0] < min_interval_seconds:
             return replace(_last[1], cached=True)
-        return _run(open_session, encryption_key)
+        return _run(open_session, encryption_key, binance_sync_url, authorization)
 
 
 def start_in_background(settings: Settings) -> threading.Thread:
     thread = threading.Thread(
         target=run_startup_refresh,
-        args=(session_factory(settings.database_url), settings.encryption_key),
+        args=(session_factory(settings.database_url), settings.encryption_key, bool(settings.binance_sync_url)),
         daemon=True,
         name="startup-refresh",
     )
@@ -63,16 +72,20 @@ def start_in_background(settings: Settings) -> threading.Thread:
     return thread
 
 
-def run_startup_refresh(open_session: SessionFactory, encryption_key: str) -> None:
-    """Refresh once if the data is stale. Never raises, and never logs more than the outcome."""
+def run_startup_refresh(open_session: SessionFactory, encryption_key: str, exchange_elsewhere: bool = False) -> None:
+    """Refresh once if the data is stale. Never raises, and never logs more than the outcome.
+
+    When another deployment reads the exchange, only the rate is refreshed here: that deployment needs a
+    signed-in person to ask it, and nobody is signed in while the service starts.
+    """
     # If a refresh is already running (a button press), there is nothing to add.
     if not _lock.acquire(blocking=False):
         return
     try:
         with open_session() as db:
-            if not is_stale(db):
+            if not is_stale(db, check_exchange=not exchange_elsewhere):
                 return
-        result = _run(open_session, encryption_key)
+        result = _run(open_session, encryption_key, skip_exchange=exchange_elsewhere)
         log.info("startup refresh: fx_rates=%s binance=%s", result.fx_rates.status, result.binance.status)
     except Exception as error:  # the service must start whatever happens here
         log.warning("startup refresh failed: %s", type(error).__name__)
@@ -80,11 +93,13 @@ def run_startup_refresh(open_session: SessionFactory, encryption_key: str) -> No
         _lock.release()
 
 
-def is_stale(db) -> bool:
+def is_stale(db, check_exchange: bool = True) -> bool:
     """True when today's rate is missing, or a connected exchange was last read a while ago."""
     latest = db.scalar(select(func.max(models.FxRate.date)).where(models.FxRate.currency == "USD"))
     if latest is None or latest < local_today():
         return True
+    if not check_exchange:
+        return False
 
     row = integrations.get_row(db, integrations.BINANCE)
     if row is None or row.encrypted_secret is None or row.status != "active":
@@ -92,15 +107,24 @@ def is_stale(db) -> bool:
     return row.last_synced_at is None or datetime.now(UTC) - row.last_synced_at > BINANCE_MAX_AGE
 
 
-def _run(open_session: SessionFactory, encryption_key: str) -> RefreshResult:
+def _run(
+    open_session: SessionFactory,
+    encryption_key: str,
+    binance_sync_url: str = "",
+    authorization: str | None = None,
+    skip_exchange: bool = False,
+) -> RefreshResult:
     global _last
-    result = RefreshResult(
-        fx_rates=_fx_rates_step(open_session),
-        binance=_binance_step(open_session, encryption_key),
-        ran_at=datetime.now(UTC),
-    )
-    # A failed run is not remembered, so the next request tries again.
-    if "error" not in (result.fx_rates.status, result.binance.status):
+    if skip_exchange:
+        exchange = Step("not_connected", "exchange_read_elsewhere", "Binance se sincroniza desde otro servicio.")
+    elif binance_sync_url:
+        exchange = _forwarded_binance_step(binance_sync_url, authorization)
+    else:
+        exchange = _binance_step(open_session, encryption_key)
+    result = RefreshResult(fx_rates=_fx_rates_step(open_session), binance=exchange, ran_at=datetime.now(UTC))
+    # A failed run is not remembered, so the next request tries again. Neither is one that left the
+    # exchange out, because a button press right after it must still read the exchange.
+    if not skip_exchange and "error" not in (result.fx_rates.status, result.binance.status):
         _last = (time.monotonic(), result)
     return result
 
@@ -121,6 +145,23 @@ def _binance_step(open_session: SessionFactory, encryption_key: str) -> Step:
                 code = "credentials_removed" if row is not None and row.status == "error" else "integration_not_connected"
                 return Step("not_connected", code, "Binance no está conectado.")
             binance_sync.sync_binance(db, encryption_key)
+        return None
+
+    return _guarded(read)
+
+
+# What the other deployment answers when there is no exchange to read; the same as when it is local.
+NOT_CONNECTED_CODES = frozenset({"integration_not_connected", "credentials_removed"})
+
+
+def _forwarded_binance_step(url: str, authorization: str | None) -> Step:
+    def read() -> Step | None:
+        try:
+            remote_sync.forward_binance_sync(url, authorization)
+        except ApiError as error:
+            if error.code in NOT_CONNECTED_CODES:
+                return Step("not_connected", error.code, error.message)
+            raise
         return None
 
     return _guarded(read)
