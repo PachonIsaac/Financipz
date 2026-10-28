@@ -38,5 +38,5 @@ def downgrade() -> None:
         END $$;
         """
     )
-    op.drop_constraint("ck_transactions_account_required_when_confirmed", "transactions", type_="check")
+    op.drop_constraint("account_required_when_confirmed", "transactions", type_="check")
     op.alter_column("transactions", "account_id", nullable=False)

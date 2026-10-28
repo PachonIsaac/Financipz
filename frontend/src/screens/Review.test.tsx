@@ -67,4 +67,41 @@ describe('review inbox', () => {
 
     await waitFor(() => expect(updateTransaction).toHaveBeenCalledWith('p2', { account_id: 'acc-1' }))
   })
+
+  it('asks what a transfer to someone else was, and confirms only after it is classified', async () => {
+    const user = userEvent.setup()
+    const updateTransaction = vi.fn(async () => transaction({ id: 'p3' }))
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [transaction({ id: 'p3', type: 'transfer', merchant: null, status: 'pending_review', source: 'gmail', target_text: 'Persona Ejemplo' })],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [
+        account({ id: 'acc-1', name: 'Cuenta de ahorros' }),
+        account({ id: 'card', name: 'Tarjeta', type: 'credit_card' }),
+        account({ id: 'loan', name: 'Préstamo a Ana', type: 'loan' }),
+      ]),
+      listCategories: vi.fn(async () => []),
+      updateTransaction: updateTransaction as never,
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    expect(await screen.findByText('Falta decir qué fue esta transferencia.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled()
+
+    // A card payment needs a card as destination, and only cards are offered.
+    await user.selectOptions(screen.getByLabelText('¿Qué fue?'), 'payment')
+    expect(screen.queryByRole('option', { name: 'Préstamo a Ana' })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Cuenta de destino'), 'card')
+    await user.click(screen.getByRole('button', { name: 'Clasificar' }))
+    await waitFor(() =>
+      expect(updateTransaction).toHaveBeenCalledWith('p3', { classification: 'payment', target_account_id: 'card' }),
+    )
+
+    // An expense needs no destination.
+    await user.selectOptions(screen.getByLabelText('¿Qué fue?'), 'expense')
+    expect(screen.queryByLabelText('Cuenta de destino')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Clasificar' }))
+    await waitFor(() => expect(updateTransaction).toHaveBeenLastCalledWith('p3', { classification: 'expense' }))
+  })
 })

@@ -37,6 +37,9 @@ class Outcome(StrEnum):
 class IngestResult:
     outcome: Outcome
     transaction: models.Transaction | None = None
+    # A repeat of a notification that carries no time of day. Two real, identical movements of the same day
+    # look the same as a resend, so the caller must report it instead of treating it as settled.
+    possible_duplicate: bool = False
 
 
 # Where the money of an income without digits goes, when the person has exactly one such account.
@@ -63,9 +66,10 @@ def ingest(db: Session, parsed: ParsedNotification | None) -> IngestResult:
     if digest is None or moment is None or parsed.amount is None or parsed.amount <= 0 or parsed.currency is None:
         return IngestResult(Outcome.UNRECOGNIZED)
 
+    ambiguous = parsed.occurred_at is None
     existing = _by_hash(db, digest)
     if existing is not None:
-        return IngestResult(Outcome.DUPLICATE, existing)
+        return IngestResult(Outcome.DUPLICATE, existing, possible_duplicate=ambiguous)
 
     row = _build(db, parsed, digest, moment)
     try:
@@ -77,7 +81,7 @@ def ingest(db: Session, parsed: ParsedNotification | None) -> IngestResult:
         existing = _by_hash(db, digest)
         if existing is None:
             raise
-        return IngestResult(Outcome.DUPLICATE, existing)
+        return IngestResult(Outcome.DUPLICATE, existing, possible_duplicate=ambiguous)
     db.commit()
     return IngestResult(Outcome.CREATED, row)
 
@@ -134,7 +138,8 @@ def _build(db: Session, parsed: ParsedNotification, digest: str, moment: datetim
         if target is not None and account is not None and target.id == account.id:
             target = None
         if target is not None:
-            target_text = None
+            # The text stays: four digits can match an account that is not the person's, and the reviewer
+            # must still be able to see where the notification said the money went.
             if classification is None and account is not None:
                 classification = default_classification(AccountType(account.type), AccountType(target.type))
             elif classification is None:

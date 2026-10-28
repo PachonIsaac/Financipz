@@ -211,7 +211,7 @@ export function MovementDetailScreen() {
             {tx.status === 'pending_review' ? (
               <Button
                 className="col-span-2"
-                disabled={confirm.isPending}
+                disabled={confirm.isPending || tx.account_id === null}
                 onClick={() =>
                   confirm.mutate(tx.id, { onSuccess: () => toast.show('Movimiento confirmado') })
                 }

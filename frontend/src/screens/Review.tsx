@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useConfirmTransaction, useDiscardTransaction, useTransactionList, useUpdateTransaction } from '../api/hooks'
-import type { Account, Transaction } from '../api/types'
+import type { Account, Classification, Transaction } from '../api/types'
 import { errorMessage } from '../api/client'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
@@ -9,13 +9,89 @@ import { Button, Card, SelectField } from '../components/ui'
 import { useLookups } from '../features/lookups'
 import { TransactionRow } from '../features/transactions/TransactionRow'
 
+const CLASS_LABELS: Record<Classification, string> = {
+  expense: 'Un gasto (el dinero salió para siempre)',
+  loan: 'Un préstamo',
+  payment: 'Pago de una tarjeta',
+  own_transfer: 'Una transferencia entre mis cuentas',
+}
+
+/** Which of the person's accounts can receive a transfer of each class. */
+function destinationsFor(classification: Classification, source: string | null, accounts: Account[]): Account[] {
+  return accounts.filter((a) => {
+    if (a.archived || a.id === source || a.type === 'system' || a.type === 'exchange') return false
+    if (classification === 'loan') return a.type === 'loan'
+    if (classification === 'payment') return a.type === 'credit_card'
+    return a.type !== 'loan'
+  })
+}
+
+/** A transfer to somebody else does not count until the person says what it was. */
+function ClassifyTransfer({ tx, accounts }: { tx: Transaction; accounts: Account[] }) {
+  const toast = useToast()
+  const update = useUpdateTransaction(tx.id)
+  const [classification, setClassification] = useState<Classification | ''>('')
+  const [destination, setDestination] = useState('')
+  const needsDestination = classification !== '' && classification !== 'expense'
+  const options = classification === '' ? [] : destinationsFor(classification, tx.account_id, accounts)
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 px-1 pb-2">
+      <p className="text-[13px] text-amber-300">Falta decir qué fue esta transferencia.</p>
+      <SelectField
+        label="¿Qué fue?"
+        value={classification}
+        onChange={(e) => {
+          setClassification(e.target.value as Classification | '')
+          setDestination('')
+        }}
+      >
+        <option value="">Elige una opción</option>
+        {(Object.keys(CLASS_LABELS) as Classification[]).map((key) => (
+          <option key={key} value={key}>
+            {CLASS_LABELS[key]}
+          </option>
+        ))}
+      </SelectField>
+      {needsDestination ? (
+        <SelectField label="Cuenta de destino" value={destination} onChange={(e) => setDestination(e.target.value)}>
+          <option value="">Elige la cuenta</option>
+          {options.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </SelectField>
+      ) : null}
+      {update.error ? (
+        <p role="alert" className="text-sm text-red-400">
+          {errorMessage(update.error)}
+        </p>
+      ) : null}
+      <Button
+        disabled={classification === '' || (needsDestination && !destination) || update.isPending}
+        onClick={() =>
+          update.mutate(
+            needsDestination
+              ? { classification: classification as Classification, target_account_id: destination }
+              : { classification: 'expense' },
+            { onSuccess: () => toast.show('Transferencia clasificada') },
+          )
+        }
+      >
+        {update.isPending ? 'Guardando…' : 'Clasificar'}
+      </Button>
+    </div>
+  )
+}
+
 /** For a movement that arrived without an account: choose it here before it can be confirmed. */
 function AccountPicker({ tx, accounts }: { tx: Transaction; accounts: Account[] }) {
   const toast = useToast()
   const update = useUpdateTransaction(tx.id)
   const [accountId, setAccountId] = useState('')
   // A movement keeps the currency it arrived in.
-  const options = accounts.filter((a) => !a.archived && a.currency === tx.currency)
+  const options = accounts.filter((a) => !a.archived && a.currency === tx.currency && a.id !== tx.target_account_id)
 
   return (
     <div className="mt-2 flex flex-col gap-2 px-1 pb-2">
@@ -83,6 +159,9 @@ export function ReviewScreen() {
                 <TransactionRow tx={tx} accounts={accounts} categories={categories} />
               </ul>
               {tx.account_id === null ? <AccountPicker tx={tx} accounts={[...accounts.values()]} /> : null}
+              {tx.account_id !== null && tx.type === 'transfer' && tx.target_account_id === null && tx.classification === null ? (
+                <ClassifyTransfer tx={tx} accounts={[...accounts.values()]} />
+              ) : null}
               <div className="grid grid-cols-2 gap-2 px-1 pb-1">
                 <Button
                   variant="secondary"
@@ -92,7 +171,7 @@ export function ReviewScreen() {
                   Descartar
                 </Button>
                 <Button
-                  disabled={busy || tx.account_id === null}
+                  disabled={busy || tx.account_id === null || (tx.type === 'transfer' && tx.target_account_id === null && tx.classification === null)}
                   onClick={() => confirm.mutate(tx.id, { onSuccess: () => toast.show('Movimiento confirmado') })}
                 >
                   Confirmar

@@ -152,7 +152,9 @@ def test_a_transfer_to_the_digits_of_an_own_account_is_an_own_transfer(client, d
 
     row = ingest.ingest(db, bank(TRANSFER_OUT_OWN)).transaction
 
-    assert (row.type, str(row.target_account_id), row.classification, row.target_text) == ("transfer", savings["id"], "own_transfer", None)
+    assert (row.type, str(row.target_account_id), row.classification, row.target_text) == (
+        "transfer", savings["id"], "own_transfer", "5678",
+    )
 
 
 def test_money_received_is_an_income_on_the_account_of_its_digits(client, db, card):
@@ -230,3 +232,40 @@ def test_the_pending_list_of_the_api_shows_what_was_ingested(client, db, card):
 
     assert len(body["items"]) == 2
     assert db.scalar(select(func.count()).select_from(models.Transaction)) == 2
+
+
+def test_a_repeat_of_a_notification_without_a_time_is_flagged_as_a_possible_duplicate(db, card):
+    from dataclasses import replace
+
+    parsed = replace(bank(PURCHASE), occurred_at=None, occurred_on=datetime(2026, 3, 5).date())
+    first = ingest.ingest(db, parsed)
+    second = ingest.ingest(db, parsed)
+
+    assert (first.outcome, first.possible_duplicate) == (Outcome.CREATED, False)
+    assert (second.outcome, second.possible_duplicate) == (Outcome.DUPLICATE, True)
+    # With a time of day a repeat is a resend, not a doubt.
+    timed = ingest.ingest(db, bank(PURCHASE_USD))
+    assert ingest.ingest(db, bank(PURCHASE_USD)).possible_duplicate is False and timed.outcome is not Outcome.DUPLICATE
+
+
+def test_a_transfer_to_a_person_classified_as_an_expense_can_then_be_confirmed(client, db, card):
+    row = ingest.ingest(db, bank(TRANSFER_OUT_PERSON)).transaction
+
+    classified = client.patch(f"{API}/transactions/{row.id}", json={"classification": "expense"})
+
+    assert classified.status_code == 200, classified.text
+    assert classified.json()["classification"] == "expense"
+    assert client.post(f"{API}/transactions/{row.id}/confirm").status_code == 200
+    assert client.get(f"{API}/accounts/{card['id']}").json()["balance"] == "-50000.00"
+
+
+def test_a_transfer_to_a_person_classified_as_a_card_payment_takes_the_card_as_destination(client, db):
+    bank_account = with_digits(client, create_account(client, name="Bank", type="bank"), "1234", "account")
+    paid = create_account(client, name="Paid card", type="credit_card")
+    row = ingest.ingest(db, bank(TRANSFER_OUT_PERSON)).transaction
+
+    response = client.patch(f"{API}/transactions/{row.id}", json={"classification": "payment", "target_account_id": paid["id"]})
+
+    assert response.status_code == 200, response.text
+    assert (response.json()["classification"], response.json()["target_account_id"]) == ("payment", paid["id"])
+    assert response.json()["account_id"] == bank_account["id"]

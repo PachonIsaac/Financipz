@@ -136,6 +136,7 @@ export interface TransactionUpdate {
   note?: string | null
   target_account_id?: string | null
   target_amount?: string | null
+  classification?: Classification | null
 }
 
 export interface TransactionPage {
