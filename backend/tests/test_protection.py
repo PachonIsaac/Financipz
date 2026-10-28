@@ -7,7 +7,8 @@ from app.core.auth import JwtVerifier, get_verifier
 from app.core.config import Settings, get_settings
 from app.main import app
 
-PUBLIC = {("GET", "/api/v1/health")}
+# The shortcut route is not behind a session: it has its own token (see test_ingest_shortcut_api).
+PUBLIC = {("GET", "/api/v1/health"), ("POST", "/api/v1/ingest/shortcut")}
 
 
 def operations() -> list[tuple[str, str]]:

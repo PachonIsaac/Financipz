@@ -11,6 +11,7 @@ from app.api.categories import router as categories_router
 from app.api.crypto import router as crypto_router
 from app.api.fx_rates import router as fx_rates_router
 from app.api.health import router as health_router
+from app.api.ingest import router as ingest_router
 from app.api.integrations import router as integrations_router
 from app.api.me import router as me_router
 from app.api.refresh import router as refresh_router
@@ -57,6 +58,8 @@ app.add_middleware(
 # Only the health check is public. Every other route needs a signed-in user.
 app.include_router(health_router, prefix="/api/v1")
 protected = [Depends(get_current_user)]
+# The shortcut route has its own token, and the two that manage it check the signed-in user themselves.
+app.include_router(ingest_router, prefix="/api/v1")
 app.include_router(me_router, prefix="/api/v1")
 app.include_router(accounts_router, prefix="/api/v1", dependencies=protected)
 app.include_router(categories_router, prefix="/api/v1", dependencies=protected)

@@ -298,3 +298,15 @@ export interface BinanceSyncResult {
   warnings: Notice[]
   last_synced_at: string
 }
+
+export interface ShortcutTokenStatus {
+  configured: boolean
+  created_at: string | null
+  last_used_at: string | null
+}
+
+export interface ShortcutTokenCreated {
+  /** Shown once: it cannot be read again, only replaced. */
+  token: string
+  created_at: string
+}

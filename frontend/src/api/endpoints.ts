@@ -15,6 +15,8 @@ import type {
   Integration,
   Me,
   Portfolio,
+  ShortcutTokenCreated,
+  ShortcutTokenStatus,
   TradePage,
   RefreshResult,
   Summary,
@@ -75,6 +77,9 @@ export function createEndpoints(client: ApiClient) {
     disconnectBinance: () => request<void>('/integrations/binance', { method: 'DELETE' }),
     // The exchange may be read by a deployment that is asleep, which takes a while to answer.
     syncBinance: () => request<BinanceSyncResult>('/integrations/binance/sync', { method: 'POST', timeoutMs: 160_000 }),
+
+    getShortcutToken: () => request<ShortcutTokenStatus>('/ingest/shortcut/token'),
+    rotateShortcutToken: () => request<ShortcutTokenCreated>('/ingest/shortcut/token/rotate', { method: 'POST' }),
 
     // Reads the exchange rate and the exchange balances; a sleeping server may need a while.
     refreshData: () => request<RefreshResult>('/refresh', { method: 'POST', timeoutMs: 160_000 }),

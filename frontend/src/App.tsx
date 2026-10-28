@@ -13,6 +13,7 @@ import { ToastProvider } from './components/Toast'
 import { config } from './lib/config'
 
 const AccountsScreen = lazy(() => import('./screens/Accounts').then((m) => ({ default: m.AccountsScreen })))
+const ShortcutScreen = lazy(() => import('./screens/Shortcut').then((m) => ({ default: m.ShortcutScreen })))
 const BinanceScreen = lazy(() => import('./screens/Binance').then((m) => ({ default: m.BinanceScreen })))
 const CryptoScreen = lazy(() => import('./screens/Crypto').then((m) => ({ default: m.CryptoScreen })))
 const CategoriesScreen = lazy(() => import('./screens/Categories').then((m) => ({ default: m.CategoriesScreen })))
@@ -50,6 +51,7 @@ export function AppRoutes() {
         <Route path="crypto" element={<CryptoScreen />} />
         <Route path="crypto/binance" element={<BinanceScreen />} />
         <Route path="more" element={<MoreScreen />} />
+        <Route path="more/shortcut" element={<ShortcutScreen />} />
         <Route path="more/accounts" element={<AccountsScreen />} />
         <Route path="more/categories" element={<CategoriesScreen />} />
         <Route path="*" element={<Navigate to="/" replace />} />
