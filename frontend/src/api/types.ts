@@ -93,7 +93,8 @@ export interface CategoryUpdate {
 
 export interface Transaction {
   id: string
-  account_id: string
+  /** Null while an automatic source could not tell the account; such a movement cannot be confirmed yet. */
+  account_id: string | null
   target_account_id: string | null
   target_text: string | null
   classification: Classification | null

@@ -33,7 +33,7 @@ function initialValues(tx: Transaction): TransactionFormValues {
   return {
     type: tx.type === 'income' || tx.type === 'transfer' ? tx.type : 'expense',
     amount: tx.amount.replace('.', ','),
-    accountId: tx.account_id,
+    accountId: tx.account_id ?? '',
     targetAccountId: tx.target_account_id ?? '',
     targetAmount: tx.target_amount ? tx.target_amount.replace('.', ',') : '',
     categoryId: tx.category_id ?? '',
@@ -86,7 +86,7 @@ export function MovementDetailScreen() {
   }
 
   const accountList = accounts.data ?? []
-  const account = accountList.find((a) => a.id === tx.account_id)
+  const account = tx.account_id ? accountList.find((a) => a.id === tx.account_id) : undefined
   const target = accountList.find((a) => a.id === tx.target_account_id)
   const category = (categories.data ?? []).find((c) => c.id === tx.category_id)
   const look = categoryLook(category, tx.type === 'transfer' ? 'transfer' : undefined)
@@ -160,7 +160,7 @@ export function MovementDetailScreen() {
           <dl className="divide-y divide-slate-200 dark:divide-slate-800">
             <DetailRow label="Fecha">{formatDateTime(tx.date)}</DetailRow>
             <DetailRow label={tx.type === 'transfer' ? 'Cuenta de origen' : 'Cuenta'}>
-              {account?.name ?? '—'}
+              {tx.account_id ? (account?.name ?? '—') : 'Sin cuenta: elígela al editar'}
             </DetailRow>
             {tx.type === 'transfer' ? (
               <DetailRow label="Cuenta destino">{target?.name ?? tx.target_text ?? '—'}</DetailRow>

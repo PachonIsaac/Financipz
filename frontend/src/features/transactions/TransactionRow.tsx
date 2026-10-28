@@ -16,15 +16,15 @@ export function TransactionRow({
   categories: Map<string, Category>
 }) {
   const category = tx.category_id ? categories.get(tx.category_id) : undefined
-  const account = accounts.get(tx.account_id)
+  const account = tx.account_id ? accounts.get(tx.account_id) : undefined
   const target = tx.target_account_id ? accounts.get(tx.target_account_id) : undefined
   const title = tx.merchant || category?.name || TRANSACTION_TYPE_LABELS[tx.type]
   const direction = directionOf(tx.type)
   const look = tx.type === 'transfer' ? categoryLook(undefined, 'transfer') : categoryLook(category)
   const subtitle =
     tx.type === 'transfer'
-      ? `${account?.name ?? 'Cuenta'} → ${target?.name ?? tx.target_text ?? 'Cuenta'}`
-      : [category?.name, account?.name].filter(Boolean).join(' · ')
+      ? `${tx.account_id ? (account?.name ?? 'Cuenta') : 'Sin cuenta'} → ${target?.name ?? tx.target_text ?? 'Cuenta'}`
+      : [category?.name, tx.account_id ? account?.name : 'Sin cuenta'].filter(Boolean).join(' · ')
 
   return (
     <li>

@@ -1,11 +1,53 @@
-import { useConfirmTransaction, useDiscardTransaction, useTransactionList } from '../api/hooks'
+import { useState } from 'react'
+import { useConfirmTransaction, useDiscardTransaction, useTransactionList, useUpdateTransaction } from '../api/hooks'
+import type { Account, Transaction } from '../api/types'
 import { errorMessage } from '../api/client'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
 import { useToast } from '../components/Toast'
-import { Button, Card } from '../components/ui'
+import { Button, Card, SelectField } from '../components/ui'
 import { useLookups } from '../features/lookups'
 import { TransactionRow } from '../features/transactions/TransactionRow'
+
+/** For a movement that arrived without an account: choose it here before it can be confirmed. */
+function AccountPicker({ tx, accounts }: { tx: Transaction; accounts: Account[] }) {
+  const toast = useToast()
+  const update = useUpdateTransaction(tx.id)
+  const [accountId, setAccountId] = useState('')
+  // A movement keeps the currency it arrived in.
+  const options = accounts.filter((a) => !a.archived && a.currency === tx.currency)
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 px-1 pb-2">
+      <p className="text-[13px] text-amber-300">No se pudo saber a qué cuenta pertenece.</p>
+      <div className="flex items-end gap-2">
+        <div className="min-w-0 flex-1">
+          <SelectField label="Cuenta" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            <option value="">Elige una cuenta</option>
+            {options.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+        <Button
+          disabled={!accountId || update.isPending}
+          onClick={() =>
+            update.mutate({ account_id: accountId }, { onSuccess: () => toast.show('Cuenta asignada') })
+          }
+        >
+          {update.isPending ? 'Asignando…' : 'Asignar'}
+        </Button>
+      </div>
+      {update.error ? (
+        <p role="alert" className="text-sm text-red-400">
+          {errorMessage(update.error)}
+        </p>
+      ) : null}
+    </div>
+  )
+}
 
 export const PENDING_FILTER = { status: 'pending_review' } as const
 
@@ -40,6 +82,7 @@ export function ReviewScreen() {
               <ul>
                 <TransactionRow tx={tx} accounts={accounts} categories={categories} />
               </ul>
+              {tx.account_id === null ? <AccountPicker tx={tx} accounts={[...accounts.values()]} /> : null}
               <div className="grid grid-cols-2 gap-2 px-1 pb-1">
                 <Button
                   variant="secondary"
@@ -49,7 +92,7 @@ export function ReviewScreen() {
                   Descartar
                 </Button>
                 <Button
-                  disabled={busy}
+                  disabled={busy || tx.account_id === null}
                   onClick={() => confirm.mutate(tx.id, { onSuccess: () => toast.show('Movimiento confirmado') })}
                 >
                   Confirmar
