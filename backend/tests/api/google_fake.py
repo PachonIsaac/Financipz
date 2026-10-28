@@ -29,7 +29,7 @@ def b64(text: str) -> str:
     return base64.urlsafe_b64encode(text.encode()).decode().rstrip("=")
 
 
-def plain_message(text: str, sender: str = "alertasynotificaciones@bancolombia.com.co", received_ms: int = 1_793_000_000_000) -> dict:
+def plain_message(text: str, sender: str = "alertasynotificaciones@ayn.notificacionesbancolombia.com", received_ms: int = 1_793_000_000_000) -> dict:
     return {
         "internalDate": str(received_ms),
         "payload": {
@@ -46,7 +46,7 @@ def html_message(text: str) -> dict:
         "internalDate": "1793000000000",
         "payload": {
             "mimeType": "text/html",
-            "headers": [{"name": "From", "value": "alertasynotificaciones@bancolombia.com.co"}],
+            "headers": [{"name": "From", "value": "alertasynotificaciones@ayn.notificacionesbancolombia.com"}],
             "body": {"data": b64(html)},
         },
     }

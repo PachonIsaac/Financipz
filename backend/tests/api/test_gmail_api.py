@@ -154,7 +154,7 @@ def test_reading_the_mail_stores_pending_movements_and_remembers_each_message(cl
 def test_the_first_read_goes_back_a_month_and_the_next_one_starts_a_day_before_the_last(client, db, connected):
     client.post(f"{API}/integrations/gmail/sync")
     first = connected.queries()[0]
-    assert "from:(alertasynotificaciones@bancolombia.com.co OR alertasynotificaciones@an.notificacionesbancolombia.com)" in first
+    assert "from:(alertasynotificaciones@ayn.notificacionesbancolombia.com)" in first
     month_ago = int((datetime.now(UTC) - timedelta(days=30)).timestamp())
     assert abs(int(first.rsplit("after:", 1)[1]) - month_ago) < 120
 
@@ -259,7 +259,7 @@ def test_a_message_that_only_claims_to_come_from_the_bank_is_not_read(client, db
         "real": plain_message(PURCHASE.replace("12.300,00", "7.000,00")),
     }
     # A display name that looks like the bank, with another address behind it.
-    connected.messages["spoof"]["payload"]["headers"][0]["value"] = "alertasynotificaciones@bancolombia.com.co <evil@elsewhere.test>"
+    connected.messages["spoof"]["payload"]["headers"][0]["value"] = "alertasynotificaciones@ayn.notificacionesbancolombia.com <evil@elsewhere.test>"
 
     body = client.post(f"{API}/integrations/gmail/sync").json()
 
