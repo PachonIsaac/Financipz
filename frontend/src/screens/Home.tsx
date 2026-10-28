@@ -1,16 +1,19 @@
 import { useState } from 'react'
+import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
 import { useAccounts, useRefreshData, useSummary, useTransactionList, useWealth } from '../api/hooks'
-import type { CategoryAmount, RefreshResult, RefreshStep } from '../api/types'
+import type { RefreshResult, RefreshStep } from '../api/types'
 import { Amount } from '../components/Amount'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
-import { Button, Card } from '../components/ui'
+import { TrendChart } from '../components/TrendChart'
+import { Card } from '../components/ui'
+import { accountIcon, categoryLook, IconChip, TONES } from '../features/appearance'
 import { useLookups } from '../features/lookups'
 import { ACCOUNT_TYPE_LABELS } from '../features/labels'
-import { formatMonth, percentOf, shiftMonth, shortMonth } from '../features/summary'
+import { formatMonth, percentOf, shiftMonth, topCategories } from '../features/summary'
 import { TransactionRow } from '../features/transactions/TransactionRow'
 import { formatDate, todayLocal } from '../lib/dates'
 import { formatRate, fromCents, toCents } from '../lib/money'
@@ -21,99 +24,58 @@ function reportError(error: unknown) {
     : null
 }
 
-function WealthCard() {
+function AvailableCard() {
   const wealth = useWealth()
   const data = wealth.data
-  const negative = data ? toCents(data.real_money) < 0n : false
   const fxMessage = reportError(wealth.error)
 
   return (
-    <Card>
-      <h2 className="mb-2 text-base font-semibold">Dinero real</h2>
+    <Card className="p-5">
+      <h2 className="text-sm font-medium text-slate-400">Disponible</h2>
       {wealth.isPending ? (
-        <ListSkeleton rows={2} label="Cargando el dinero real" />
+        <ListSkeleton rows={1} label="Cargando el disponible" />
       ) : fxMessage ? (
-        <p role="alert" className="text-sm text-amber-800 dark:text-amber-300">
+        <p role="alert" className="mt-1 text-sm text-amber-300">
           {fxMessage}
         </p>
       ) : wealth.isError ? (
         <ErrorState error={wealth.error} onRetry={() => void wealth.refetch()} />
       ) : data ? (
-        <>
-          <p
-            className={`text-3xl font-bold ${negative ? 'text-red-600 dark:text-red-400' : ''}`}
-            aria-label={negative ? 'Dinero real negativo' : 'Dinero real'}
-          >
-            <Amount value={data.real_money} currency="COP" tone="neutral" />
-          </p>
-          {negative ? (
-            <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
-              La deuda de tarjetas supera el dinero disponible.
-            </p>
-          ) : null}
-          <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-            <div>
-              <dt className="text-slate-500 dark:text-slate-400">Disponible</dt>
-              <dd className="font-semibold">
-                <Amount value={data.available} currency="COP" />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-slate-500 dark:text-slate-400">Deuda de tarjetas</dt>
-              <dd className="font-semibold">
-                <Amount value={data.credit_card_debt} currency="COP" />
-              </dd>
-            </div>
-          </dl>
-          {data.loans.length > 0 ? (
-            <div className="mt-3">
-              <h3 className="text-sm font-medium">
-                Préstamos por cobrar: <Amount value={data.receivable_loans} currency="COP" />
-              </h3>
-              <ul className="text-sm text-slate-600 dark:text-slate-400">
-                {data.loans.map((loan) => (
-                  <li key={loan.account_id} className="flex justify-between">
-                    <span>{loan.counterparty ?? 'Sin nombre'}</span>
-                    <Amount value={loan.amount} currency="COP" />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {data.rate ? (
-            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-              TRM {formatRate(data.rate.value)} del {formatDate(data.rate.date)}
-            </p>
-          ) : null}
-        </>
+        <p className="mt-1 text-[40px] leading-[46px] font-bold tracking-tight" aria-label="Disponible">
+          <Amount value={data.available} currency="COP" tone="neutral" />
+        </p>
       ) : null}
     </Card>
   )
 }
 
-function CategoryBars({ title, items }: { title: string; items: CategoryAmount[] }) {
+function CategoryBars({ items }: { items: Parameters<typeof topCategories>[0] }) {
   if (items.length === 0) return null
-  const max = items.reduce((best, item) => (toCents(item.amount) > toCents(best) ? item.amount : best), '0.00')
+  const shares = topCategories(items)
+  const max = shares.reduce((best, item) => (toCents(item.amount) > toCents(best) ? item.amount : best), '0.00')
   return (
-    <div className="mt-4">
-      <h3 className="mb-1 text-sm font-medium">{title}</h3>
-      <ul className="flex flex-col gap-2">
-        {items.map((item) => (
-          <li key={item.category_id ?? 'none'}>
-            <div className="flex justify-between text-sm">
-              <span className="truncate">{item.name}</span>
-              <Amount value={item.amount} currency="COP" tone="neutral" />
-            </div>
-            <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800" aria-hidden="true">
-              <div
-                className="h-1.5 rounded-full bg-emerald-500"
-                style={{ width: `${percentOf(item.amount, max)}%` }}
-              />
+    <ul className="mt-1 flex flex-col">
+      {shares.map((item) => {
+        const look = categoryLook(item.others ? undefined : { name: item.name, icon: null, color: item.color, type: 'expense' })
+        return (
+          <li key={item.key} className="flex min-h-[52px] items-center gap-3 py-1.5">
+            <IconChip icon={look.Icon} color={look.color} size={36} />
+            <div className="min-w-0 flex-1">
+              <div className="flex justify-between gap-2 text-[15px]">
+                <span className="truncate">{item.name}</span>
+                <Amount value={item.amount} currency="COP" tone="neutral" className="font-semibold" />
+              </div>
+              <div className="mt-1.5 h-1.5 rounded-full bg-slate-950" aria-hidden="true">
+                <div
+                  className="h-1.5 rounded-full"
+                  style={{ width: `${percentOf(item.amount, max)}%`, background: look.color }}
+                />
+              </div>
             </div>
           </li>
-        ))}
-      </ul>
-    </div>
+        )
+      })}
+    </ul>
   )
 }
 
@@ -122,76 +84,78 @@ function MonthSummaryCard() {
   const summary = useSummary(month)
   const data = summary.data
   const fxMessage = reportError(summary.error)
+  const step = 'flex size-11 items-center justify-center rounded-xl text-slate-400 active:bg-slate-800'
 
   return (
-    <Card>
-      <div className="mb-3 flex items-center justify-between">
-        <button
-          type="button"
-          aria-label="Mes anterior"
-          onClick={() => setMonth((m) => shiftMonth(m, -1))}
-          className="flex size-11 items-center justify-center rounded-xl text-xl active:bg-slate-200 dark:active:bg-slate-800"
-        >
-          ‹
-        </button>
-        <h2 className="text-base font-semibold capitalize">{formatMonth(month)}</h2>
-        <button
-          type="button"
-          aria-label="Mes siguiente"
-          onClick={() => setMonth((m) => shiftMonth(m, 1))}
-          className="flex size-11 items-center justify-center rounded-xl text-xl active:bg-slate-200 dark:active:bg-slate-800"
-        >
-          ›
-        </button>
-      </div>
-      {summary.isPending ? (
-        <ListSkeleton rows={1} label="Cargando el resumen" />
-      ) : fxMessage ? (
-        <p role="alert" className="text-sm text-amber-800 dark:text-amber-300">
-          {fxMessage}
-        </p>
-      ) : summary.isError ? (
-        <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
-      ) : data ? (
-        <>
-          <dl className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Ingresos</dt>
-              <dd className="font-semibold">
-                <Amount value={data.income} currency="COP" showPlus />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Gastos</dt>
-              <dd className="font-semibold">
-                <Amount value={fromCents(-toCents(data.expenses))} currency="COP" />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">Balance</dt>
-              <dd className="font-semibold">
-                <Amount value={data.balance} currency="COP" />
-              </dd>
-            </div>
-          </dl>
-          <CategoryBars title="Gasto por categoría" items={data.expenses_by_category} />
-          <CategoryBars title="Ingresos por categoría" items={data.income_by_category} />
-          {data.trend.length > 0 ? (
-            <div className="mt-4">
-              <h3 className="mb-1 text-sm font-medium">Últimos 6 meses</h3>
-              <ul className="flex flex-col gap-1 text-sm">
-                {data.trend.map((point) => (
-                  <li key={point.month} className="flex justify-between">
-                    <span className="capitalize">{shortMonth(point.month)}</span>
-                    <Amount value={point.balance} currency="COP" />
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </>
+    <>
+      <Card>
+        <div className="flex items-center justify-between">
+          <button type="button" aria-label="Mes anterior" onClick={() => setMonth((m) => shiftMonth(m, -1))} className={step}>
+            <ChevronLeft aria-hidden="true" size={22} />
+          </button>
+          <h2 className="text-[17px] font-semibold capitalize">{formatMonth(month)}</h2>
+          <button type="button" aria-label="Mes siguiente" onClick={() => setMonth((m) => shiftMonth(m, 1))} className={step}>
+            <ChevronRight aria-hidden="true" size={22} />
+          </button>
+        </div>
+        {summary.isPending ? (
+          <ListSkeleton rows={1} label="Cargando el resumen" />
+        ) : fxMessage ? (
+          <p role="alert" className="text-sm text-amber-300">
+            {fxMessage}
+          </p>
+        ) : summary.isError ? (
+          <ErrorState error={summary.error} onRetry={() => void summary.refetch()} />
+        ) : data ? (
+          <>
+            <dl className="mt-1 grid grid-cols-3 gap-2">
+              <div className="rounded-2xl bg-slate-800 px-3 py-2.5">
+                <dt className="text-xs text-slate-400">Ingresos</dt>
+                <dd className="mt-0.5 text-[15px] font-semibold">
+                  <Amount value={data.income} currency="COP" showPlus />
+                </dd>
+              </div>
+              <div className="rounded-2xl bg-slate-800 px-3 py-2.5">
+                <dt className="text-xs text-slate-400">Gastos</dt>
+                <dd className="mt-0.5 text-[15px] font-semibold">
+                  <Amount value={fromCents(-toCents(data.expenses))} currency="COP" tone="neutral" />
+                </dd>
+              </div>
+              <div className="rounded-2xl bg-slate-800 px-3 py-2.5">
+                <dt className="text-xs text-slate-400">Balance</dt>
+                <dd className="mt-0.5 text-[15px] font-semibold text-emerald-500">
+                  <Amount value={data.balance} currency="COP" tone="neutral" />
+                </dd>
+              </div>
+            </dl>
+            {data.trend.length > 0 ? (
+              <div className="mt-5">
+                <h3 className="mb-2 text-[15px] font-semibold">Últimos 6 meses</h3>
+                <TrendChart data={data.trend} />
+              </div>
+            ) : null}
+          </>
+        ) : null}
+      </Card>
+
+      {data && data.expenses_by_category.length > 0 ? (
+        <Card className="pb-2">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-[17px] font-semibold">Gasto por categoría</h2>
+            <span className="text-[13px] text-slate-400">
+              <Amount value={fromCents(-toCents(data.expenses))} currency="COP" tone="neutral" />
+            </span>
+          </div>
+          <CategoryBars items={data.expenses_by_category} />
+        </Card>
       ) : null}
-    </Card>
+      {data && data.income_by_category.length > 0 ? (
+        <Card className="pb-2">
+          <h2 className="text-[17px] font-semibold">Ingresos por categoría</h2>
+          <CategoryBars items={data.income_by_category} />
+        </Card>
+      ) : null}
+    </>
   )
 }
 
@@ -203,7 +167,7 @@ function stepText(name: string, step: RefreshStep, done: string): string {
 
 function RefreshResultText({ result }: { result: RefreshResult }) {
   return (
-    <ul className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+    <ul className="-mt-2 mb-4 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-slate-400">
       <li>{stepText('TRM', result.fx_rates, 'actualizada')}</li>
       <li>{stepText('Binance', result.binance, 'actualizado')}</li>
       {result.cached ? <li>Ya estaba al día.</li> : null}
@@ -211,40 +175,61 @@ function RefreshResultText({ result }: { result: RefreshResult }) {
   )
 }
 
-function RefreshData() {
-  const refresh = useRefreshData()
+function RateLine({ rate }: { rate: { value: string; date: string } | null | undefined }) {
+  if (!rate) return null
   return (
-    <div>
-      <Button variant="secondary" className="w-full" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
-        {refresh.isPending ? 'Actualizando…' : 'Actualizar datos'}
-      </Button>
-      {refresh.data ? <RefreshResultText result={refresh.data} /> : null}
-      {refresh.isError ? <ErrorState error={refresh.error} /> : null}
-    </div>
+    <p className="-mt-3 mb-4 text-[13px] text-slate-400">
+      TRM {formatRate(rate.value)} del {formatDate(rate.date)}
+    </p>
   )
 }
 
 export function HomeScreen() {
   const accounts = useAccounts()
+  const wealth = useWealth()
+  const refresh = useRefreshData()
   const recent = useTransactionList({})
   const lookups = useLookups()
   const visible = (accounts.data ?? []).filter((a) => !a.archived)
   const latest = (recent.data?.pages[0]?.items ?? []).slice(0, 5)
+  const rate = wealth.data?.rate
 
   return (
     <>
-      <PageHeader title="Inicio" />
+      <PageHeader
+        title="Inicio"
+        action={
+          <button
+            type="button"
+            aria-label="Actualizar datos"
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate()}
+            className="flex size-11 items-center justify-center rounded-full border border-slate-800 bg-slate-900 text-emerald-500 active:bg-slate-800 disabled:opacity-60"
+          >
+            <RefreshCw aria-hidden="true" size={20} strokeWidth={1.75} className={refresh.isPending ? 'animate-spin' : ''} />
+          </button>
+        }
+      />
+      <ErrorBoundary quiet>
+        <RateLine rate={rate} />
+      </ErrorBoundary>
       <div className="flex flex-col gap-4">
-        <RefreshData />
-        <ErrorBoundary label="No se pudo mostrar el dinero real.">
-          <WealthCard />
+        {refresh.data ? <RefreshResultText result={refresh.data} /> : null}
+        {refresh.isError ? <ErrorState error={refresh.error} /> : null}
+        <ErrorBoundary label="No se pudo mostrar el disponible.">
+          <AvailableCard />
         </ErrorBoundary>
         <ErrorBoundary label="No se pudo mostrar el resumen del mes.">
           <MonthSummaryCard />
         </ErrorBoundary>
 
-        <Card>
-          <h2 className="mb-2 text-base font-semibold">Cuentas</h2>
+        <Card className="pb-2">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-[17px] font-semibold">Cuentas</h2>
+            <Link to="/more/accounts" className="flex min-h-11 items-center text-sm font-medium text-emerald-500">
+              Administrar
+            </Link>
+          </div>
           {accounts.isPending ? (
             <ListSkeleton rows={3} label="Cargando las cuentas" />
           ) : accounts.isError ? (
@@ -254,30 +239,42 @@ export function HomeScreen() {
               title="Aún no tienes cuentas"
               description="Crea tu primera cuenta para empezar a registrar movimientos."
               action={
-                <Link to="/more/accounts" className="inline-flex min-h-11 items-center font-medium text-emerald-700 dark:text-emerald-400">
+                <Link to="/more/accounts" className="inline-flex min-h-11 items-center font-medium text-emerald-500">
                   Crear una cuenta
                 </Link>
               }
             />
           ) : (
-            <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            <ul>
               {visible.map((account) => (
-                <li key={account.id} className="flex min-h-12 items-center justify-between gap-3 py-2">
-                  <div className="min-w-0">
+                <li key={account.id} className="flex min-h-[60px] items-center gap-3 border-t border-slate-800 py-2 first:border-t-0">
+                  <IconChip icon={accountIcon(account.type)} color={account.include_in_balance ? undefined : TONES.gray} />
+                  <div className={`min-w-0 flex-1 ${account.include_in_balance ? '' : 'opacity-70'}`}>
                     <p className="truncate text-base">{account.name}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">{ACCOUNT_TYPE_LABELS[account.type]}</p>
+                    <p className="flex flex-wrap items-center gap-1.5 text-[13px] text-slate-400">
+                      {ACCOUNT_TYPE_LABELS[account.type]}
+                      {account.include_in_balance ? null : (
+                        <span className="rounded-full border border-slate-800 bg-slate-800 px-2 text-[11px] leading-4 font-semibold">
+                          Fuera del balance
+                        </span>
+                      )}
+                    </p>
                   </div>
-                  <Amount value={account.balance} currency={account.currency} className="text-base font-semibold" />
+                  <Amount
+                    value={account.balance}
+                    currency={account.currency}
+                    className={`text-base font-semibold ${account.include_in_balance ? '' : 'text-slate-400'}`}
+                  />
                 </li>
               ))}
             </ul>
           )}
         </Card>
 
-        <Card>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Últimos movimientos</h2>
-            <Link to="/movements" className="flex min-h-11 items-center text-sm font-medium text-emerald-700 dark:text-emerald-400">
+        <Card className="pb-2">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-[17px] font-semibold">Últimos movimientos</h2>
+            <Link to="/movements" className="flex min-h-11 items-center text-sm font-medium text-emerald-500">
               Ver todos
             </Link>
           </div>

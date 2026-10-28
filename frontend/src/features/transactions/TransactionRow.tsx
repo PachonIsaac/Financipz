@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import type { Account, Category, Transaction } from '../../api/types'
 import { Amount } from '../../components/Amount'
 import { Badge } from '../../components/ui'
+import { categoryLook, IconChip } from '../appearance'
 import { SOURCE_LABELS, STATUS_LABELS, TRANSACTION_TYPE_LABELS } from '../labels'
 import { directionOf, signedAmount } from './display'
 
@@ -19,6 +20,7 @@ export function TransactionRow({
   const target = tx.target_account_id ? accounts.get(tx.target_account_id) : undefined
   const title = tx.merchant || category?.name || TRANSACTION_TYPE_LABELS[tx.type]
   const direction = directionOf(tx.type)
+  const look = tx.type === 'transfer' ? categoryLook(undefined, 'transfer') : categoryLook(category)
   const subtitle =
     tx.type === 'transfer'
       ? `${account?.name ?? 'Cuenta'} → ${target?.name ?? tx.target_text ?? 'Cuenta'}`
@@ -28,9 +30,10 @@ export function TransactionRow({
     <li>
       <Link
         to={`/movements/${tx.id}`}
-        className="flex min-h-14 items-center justify-between gap-3 rounded-xl px-1 py-2 active:bg-slate-200/60 dark:active:bg-slate-800"
+        className="flex min-h-16 items-center gap-3 border-t border-slate-800 py-2 active:bg-slate-800/60 [li:first-child_&]:border-t-0"
       >
-        <div className="min-w-0">
+        <IconChip icon={look.Icon} color={tx.type === 'transfer' ? undefined : look.color} />
+        <div className="min-w-0 flex-1">
           <p className="truncate text-base font-medium">{title}</p>
           <p className="flex flex-wrap items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400">
             <span className="truncate">{subtitle}</span>

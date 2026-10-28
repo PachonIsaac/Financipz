@@ -5,6 +5,8 @@ interface Props {
   children: ReactNode
   /** What the user reads when this part could not be shown. */
   label?: string
+  /** Show nothing at all when this part fails, for details the screen can do without. */
+  quiet?: boolean
 }
 
 interface State {
@@ -28,6 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (!this.state.failed) return this.props.children
+    if (this.props.quiet) return null
     return (
       <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
         <p>{this.props.label ?? 'No se pudo mostrar esta sección.'}</p>

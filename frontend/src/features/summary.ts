@@ -1,4 +1,4 @@
-import { toCents } from '../lib/money'
+import { fromCents, toCents } from '../lib/money'
 
 /** YYYY-MM shifted by `delta` months. */
 export function shiftMonth(month: string, delta: number): string {
@@ -26,4 +26,32 @@ export function percentOf(amount: string, max: string): number {
   const part = toCents(amount)
   if (total <= 0n || part <= 0n) return 0
   return Math.min(100, Number((part * 100n) / total))
+}
+
+export interface CategoryShare {
+  key: string
+  name: string
+  color: string | null
+  amount: string
+  /** True for the single entry that gathers the smaller categories. */
+  others: boolean
+}
+
+/** The biggest `limit` categories, and the rest gathered into one "Otras (n)" entry. */
+export function topCategories(
+  items: { category_id: string | null; name: string; color: string | null; amount: string }[],
+  limit = 5,
+): CategoryShare[] {
+  const sorted = [...items].sort((a, b) => Number(toCents(b.amount) - toCents(a.amount)))
+  const shown = sorted.slice(0, limit).map((item) => ({
+    key: item.category_id ?? 'none',
+    name: item.name,
+    color: item.color,
+    amount: item.amount,
+    others: false,
+  }))
+  const rest = sorted.slice(limit)
+  if (rest.length === 0) return shown
+  const total = rest.reduce((sum, item) => sum + toCents(item.amount), 0n)
+  return [...shown, { key: 'others', name: `Otras (${rest.length})`, color: null, amount: fromCents(total), others: true }]
 }
