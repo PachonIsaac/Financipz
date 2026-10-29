@@ -4,7 +4,7 @@ Mobile-first PWA built with Vite, React, TypeScript, Tailwind CSS and TanStack Q
 
 ## Screens
 
-Home (balance, month summary with a chart, spending by category, accounts, latest movements), Movements (grouped by day, with filters), New movement, Review (movements that arrived from the bank or the wallet and wait to be confirmed, with the account and the class of a transfer to be chosen when the notification did not say), Accounts (including leaving an account out of the balance), Categories (color and icon), Crypto and the exchange connection, the mailbox connection, and the iOS shortcut token.
+Home (balance, month summary with a chart, spending by category, accounts, latest movements), Movements (grouped by day, with filters), New movement, Review (movements that arrived from the bank or the wallet and wait to be confirmed, with the account and the class of a transfer to be chosen when the notification did not say), Accounts (including leaving an account out of the balance), Categories (color and icon), Crypto and the exchange connection, and the mailbox connection.
 
 The app asks the API for its health as soon as it opens, so a sleeping server wakes while the person signs in; a notice shows the elapsed time and the last wake-up durations are kept on the device (More screen).
 

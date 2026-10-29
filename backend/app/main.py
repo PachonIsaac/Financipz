@@ -12,7 +12,6 @@ from app.api.crypto import router as crypto_router
 from app.api.fx_rates import router as fx_rates_router
 from app.api.gmail import router as gmail_router
 from app.api.health import router as health_router
-from app.api.ingest import router as ingest_router
 from app.api.integrations import router as integrations_router
 from app.api.me import router as me_router
 from app.api.refresh import router as refresh_router
@@ -59,9 +58,8 @@ app.add_middleware(
 # Only the health check is public. Every other route needs a signed-in user.
 app.include_router(health_router, prefix="/api/v1")
 protected = [Depends(get_current_user)]
-# The shortcut route has its own token, the mailbox callback its own signed state, and the routes that
-# manage either check the signed-in user themselves.
-app.include_router(ingest_router, prefix="/api/v1")
+# The mailbox callback has its own signed state, and the routes that manage the connection check the
+# signed-in user themselves.
 app.include_router(gmail_router, prefix="/api/v1")
 app.include_router(me_router, prefix="/api/v1")
 app.include_router(accounts_router, prefix="/api/v1", dependencies=protected)

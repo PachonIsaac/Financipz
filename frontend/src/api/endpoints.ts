@@ -16,8 +16,6 @@ import type {
   Integration,
   Me,
   Portfolio,
-  ShortcutTokenCreated,
-  ShortcutTokenStatus,
   TradePage,
   RefreshResult,
   Summary,
@@ -83,9 +81,6 @@ export function createEndpoints(client: ApiClient) {
     disconnectBinance: () => request<void>('/integrations/binance', { method: 'DELETE' }),
     // The exchange may be read by a deployment that is asleep, which takes a while to answer.
     syncBinance: () => request<BinanceSyncResult>('/integrations/binance/sync', { method: 'POST', timeoutMs: 160_000 }),
-
-    getShortcutToken: () => request<ShortcutTokenStatus>('/ingest/shortcut/token'),
-    rotateShortcutToken: () => request<ShortcutTokenCreated>('/ingest/shortcut/token/rotate', { method: 'POST' }),
 
     // The browser cannot send the session on a redirect, so the app asks for the address and opens it.
     connectGmail: () => request<{ authorization_url: string }>('/integrations/gmail/connect', { method: 'POST' }),

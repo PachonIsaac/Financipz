@@ -94,14 +94,12 @@ The same actions are available as `PUT /api/v1/integrations/binance` (connect), 
 
 ## Automatic ingestion
 
-Notifications from the bank (email) and the wallet (SMS) are turned into movements by the parsers in `app/parsers` and stored by the pipeline in `app/services/ingest.py`:
+Notifications from the bank (email) are turned into movements by the parsers in `app/parsers` and stored by the pipeline in `app/services/ingest.py` (the parser of the wallet's SMS is kept, though no route uses it):
 
 - Every movement it creates is **pending review**: it counts in no balance, summary or chart until it is confirmed.
 - The same notification is stored once (a hash identifies it); a repeat is reported as a duplicate.
 - The account comes from the last digits and the currency, or from the only account of a type (for example, the one wallet). When that is not certain it is left empty, and the movement cannot be confirmed until one is chosen. A transfer to someone else needs a class (expense, loan, card payment or own transfer) before it is confirmed. Nothing is guessed.
 - The text of a notification is never stored, only the fields found in it.
-
-**iOS shortcut (SMS of the wallet).** `POST /api/v1/ingest/shortcut` takes `{"source": "sms_uala", "text": "...", "received_at": "<ISO 8601>"}` with the header `X-Ingest-Token`. The token is created with `POST /api/v1/ingest/shortcut/token/rotate` (signed-in user), shown once and kept only as a hash; rotating it invalidates the previous one. The route is rate limited and answers 201 (created), 409 (already received), 422 (not recognized) or 401 (bad token).
 
 **Mailbox (read-only).** Create an OAuth client of type "Web application" with the Gmail API enabled, register `GOOGLE_REDIRECT_URI` (this API's `/api/v1/integrations/gmail/callback`) as an authorized redirect address, and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` and `APP_URL`. Then `POST /api/v1/integrations/gmail/connect` returns the consent address; the only permission requested is `gmail.readonly`, and the refresh token is stored encrypted. `POST /api/v1/integrations/gmail/sync` reads the messages of `GMAIL_SENDERS` that have not been read (each message once), starting from today on the first read unless `GMAIL_FIRST_SYNC_DAYS` says otherwise. `DELETE /api/v1/integrations/gmail` withdraws the permission.
 

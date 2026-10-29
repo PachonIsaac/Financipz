@@ -27,7 +27,6 @@ export const keys = {
   wealth: ['wealth'] as const,
   crypto: ['crypto'] as const,
   integrations: ['integrations'] as const,
-  shortcutToken: ['shortcut-token'] as const,
   summary: (month: string) => ['summary', month] as const,
 }
 
@@ -263,20 +262,6 @@ export function useSyncBinance() {
   const api = useApi()
   const client = useQueryClient()
   return useMutation({ mutationFn: () => api.syncBinance(), onSettled: () => refreshExchange(client) })
-}
-
-export function useShortcutToken() {
-  const api = useApi()
-  return useQuery({ queryKey: keys.shortcutToken, queryFn: () => api.getShortcutToken() })
-}
-
-export function useRotateShortcutToken() {
-  const api = useApi()
-  const client = useQueryClient()
-  return useMutation({
-    mutationFn: () => api.rotateShortcutToken(),
-    onSuccess: () => client.invalidateQueries({ queryKey: keys.shortcutToken }),
-  })
 }
 
 /** Reading the mail can add pending movements, which the review inbox and its counter must show. */
