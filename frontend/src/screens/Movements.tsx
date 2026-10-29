@@ -40,7 +40,8 @@ export function MovementsScreen() {
   const [type, setType] = useState<TransactionType | ''>('')
   const [showFilters, setShowFilters] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
-  const [pending, setPending] = useState(false)
+  // The movements waiting for review, or the ones set aside, are looked at apart from the rest.
+  const [special, setSpecial] = useState<'' | 'pending_review' | 'discarded'>('')
   const q = useDebounced(text.trim(), 300)
 
   const filters = useMemo<TransactionFilters>(() => {
@@ -51,9 +52,9 @@ export function MovementsScreen() {
     if (accountId) result.account_id = accountId
     if (categoryId) result.category_id = categoryId
     if (type) result.type = type
-    if (pending) result.status = 'pending_review'
+    if (special) result.status = special
     return result
-  }, [q, from, to, accountId, categoryId, type, pending])
+  }, [q, from, to, accountId, categoryId, type, special])
 
   const list = useTransactionList(filters)
   const { accounts, categories, accountsQuery, categoriesQuery } = useLookups()
@@ -120,8 +121,9 @@ export function MovementsScreen() {
       ) : null}
       <div role="group" aria-label="Tipo de movimiento" className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4">
         {[
-          ...QUICK_FILTERS.map((chip) => ({ label: chip.label, active: !pending && type === chip.type, select: () => { setPending(false); setType(chip.type) } })),
-          { label: 'Por revisar', active: pending, select: () => { setPending(true); setType('') } },
+          ...QUICK_FILTERS.map((chip) => ({ label: chip.label, active: special === '' && type === chip.type, select: () => { setSpecial(''); setType(chip.type) } })),
+          { label: 'Por revisar', active: special === 'pending_review', select: () => { setSpecial('pending_review'); setType('') } },
+          { label: 'Descartados', active: special === 'discarded', select: () => { setSpecial('discarded'); setType('') } },
         ].map((chip) => (
           <button
             key={chip.label}

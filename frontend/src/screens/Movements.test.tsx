@@ -47,6 +47,10 @@ describe('movements screen', () => {
     await waitFor(() => expect(listTransactions).toHaveBeenLastCalledWith({ status: 'pending_review' }, undefined))
     expect(screen.getByRole('button', { name: 'Por revisar' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: 'Gastos' })).toHaveAttribute('aria-pressed', 'false')
+
+    await user.click(screen.getByRole('button', { name: 'Descartados' }))
+    await waitFor(() => expect(listTransactions).toHaveBeenLastCalledWith({ status: 'discarded' }, undefined))
+    expect(screen.getByRole('button', { name: 'Descartados' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('shows an empty state', async () => {

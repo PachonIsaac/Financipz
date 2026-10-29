@@ -641,6 +641,21 @@ def test_discarded_movements_never_count(client, db):
     assert cannot_confirm.status_code == 409
 
 
+def test_discarded_movements_are_not_listed_unless_asked_for(client, db):
+    bank = create_account(client, initial=1000)
+    kept = create_transaction(client, bank, "expense", 100)
+    pending = insert_transaction(db, bank["id"], amount="300")
+    client.post(f"{API}/transactions/{pending}/discard")
+
+    everything = client.get(f"{API}/transactions").json()["items"]
+    discarded = client.get(f"{API}/transactions", params={"status": "discarded"}).json()["items"]
+
+    assert [item["id"] for item in everything] == [kept["id"]]
+    assert [item["id"] for item in discarded] == [pending]
+    searched = client.get(f"{API}/transactions", params={"account_id": bank["id"]}).json()["items"]
+    assert [item["id"] for item in searched] == [kept["id"]]
+
+
 def test_a_confirmed_movement_can_be_discarded_and_stops_counting(client):
     bank = create_account(client, initial=1000)
     movement = create_transaction(client, bank, "expense", 100)

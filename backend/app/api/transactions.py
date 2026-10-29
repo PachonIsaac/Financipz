@@ -26,7 +26,10 @@ def list_transactions(
     limit: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
 ):
-    """Newest first. `account_id` matches both the source and the destination of a transfer."""
+    """Newest first. `account_id` matches both the source and the destination of a transfer.
+
+    Discarded movements are left out unless `status=discarded` is asked for.
+    """
     filters = TransactionFilters(
         date_from=date_from,
         date_to=date_to,

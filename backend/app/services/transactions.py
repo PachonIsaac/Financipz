@@ -188,6 +188,9 @@ def list_transactions(
         query = query.where(models.Transaction.type == filters.type.value)
     if filters.status is not None:
         query = query.where(models.Transaction.status == filters.status.value)
+    else:
+        # A discarded movement is set aside: it does not count and it does not show up, unless asked for.
+        query = query.where(models.Transaction.status != TransactionStatus.DISCARDED.value)
     if filters.text:
         pattern = "%" + filters.text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         query = query.where(
