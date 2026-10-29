@@ -96,14 +96,28 @@ function AccountForm({ account, onDone }: { account?: Account; onDone: () => voi
         <option value="COP">COP (pesos)</option>
         <option value="USD">USD (dólares)</option>
       </SelectField>
-      <TextField
-        label="Saldo inicial"
-        inputMode="decimal"
-        placeholder="0"
-        value={values.initialBalance}
-        onChange={(e) => set('initialBalance', e.target.value)}
-        error={errors.initialBalance}
-      />
+      {account ? (
+        // The opening balance only says how much the account held when it was created. Changing it later would
+        // rewrite the balance without leaving a trace, so a correction is made with an adjustment instead.
+        <div className="rounded-2xl bg-slate-900 p-3 text-sm text-slate-400">
+          <p>
+            Saldo inicial: <Amount value={account.initial_balance} currency={account.currency} tone="neutral" exact />
+          </p>
+          <p className="mt-1 text-[13px]">
+            Solo se define al crear la cuenta. Si el saldo no coincide con el real, corrígelo con «Ajustar saldo».
+          </p>
+        </div>
+      ) : (
+        <TextField
+          label="Saldo inicial"
+          inputMode="decimal"
+          placeholder="0"
+          hint="Lo que tiene la cuenta hoy. Después los movimientos lo van cambiando."
+          value={values.initialBalance}
+          onChange={(e) => set('initialBalance', e.target.value)}
+          error={errors.initialBalance}
+        />
+      )}
       {values.type === 'loan' ? (
         <TextField
           label="Persona a quien le prestaste"

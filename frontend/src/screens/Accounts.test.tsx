@@ -48,4 +48,18 @@ describe('accounts and the balance', () => {
 
     expect(screen.getByRole('switch', { name: 'Incluir en el balance' })).not.toBeChecked()
   })
+
+  it('asks for the opening balance only when the account is created, and not when it is edited', async () => {
+    const user = userEvent.setup()
+    setup()
+
+    await user.click(await screen.findByRole('button', { name: 'Nueva' }))
+    expect(screen.getByLabelText('Saldo inicial')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancelar' }))
+
+    await user.click(await screen.findByText('Cuenta de ahorros'))
+    expect(screen.queryByLabelText('Saldo inicial')).not.toBeInTheDocument()
+    expect(screen.getByText(/Solo se define al crear la cuenta/)).toBeInTheDocument()
+    expect(screen.getByText(/Saldo inicial:/)).toBeInTheDocument()
+  })
 })
