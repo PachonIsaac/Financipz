@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { ChevronRight, Coins, CreditCard, Mail, Tag } from 'lucide-react'
+import { ChevronRight, Coins, CreditCard, Mail, Smartphone, Tag } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { PageHeader } from '../components/Layout'
@@ -54,6 +54,13 @@ export function MoreScreen() {
               <span className="flex items-center gap-3">
                 <IconChip icon={Mail} size={36} />
                 Correo (Gmail)
+              </span>
+              <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
+            </Link>
+            <Link to="/more/shortcut" className={LINK}>
+              <span className="flex items-center gap-3">
+                <IconChip icon={Smartphone} size={36} />
+                Atajo de iOS
               </span>
               <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
             </Link>

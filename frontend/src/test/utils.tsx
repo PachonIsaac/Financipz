@@ -40,6 +40,8 @@ export function fakeApi(overrides: Partial<Endpoints> = {}): Endpoints {
     connectGmail: unmocked('connectGmail'),
     syncGmail: unmocked('syncGmail'),
     disconnectGmail: unmocked('disconnectGmail'),
+    getShortcutToken: unmocked('getShortcutToken'),
+    rotateShortcutToken: unmocked('rotateShortcutToken'),
     listMatches: vi.fn(async () => []),
     mergeTransaction: unmocked('mergeTransaction'),
     confirmTransaction: unmocked('confirmTransaction'),

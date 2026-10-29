@@ -238,6 +238,17 @@ class Integration(Base):
     warnings: Mapped[list] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))
 
 
+class IngestToken(Base):
+    """The token the iOS shortcut sends. Only its hash is stored, and there is at most one live token."""
+
+    __tablename__ = "ingest_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID_PK, primary_key=True, server_default=func.gen_random_uuid())
+    token_hash: Mapped[str] = mapped_column(Text, unique=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ProcessedEmail(Base):
     __tablename__ = "processed_emails"
     __table_args__ = (
