@@ -104,4 +104,51 @@ describe('review inbox', () => {
     await user.click(screen.getByRole('button', { name: 'Clasificar' }))
     await waitFor(() => expect(updateTransaction).toHaveBeenLastCalledWith('p3', { classification: 'expense' }))
   })
+
+  it('offers the movement it may be the same as, and joins them only when the person says so', async () => {
+    const user = userEvent.setup()
+    const typed = transaction({ id: 'typed', merchant: 'Supermercado', amount: '86400.00', status: 'confirmed', source: 'manual' })
+    const mergeTransaction = vi.fn(async () => typed)
+    const listMatches = vi.fn(async (id: string) => (id === 'p9' ? [typed] : []))
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [transaction({ id: 'p9', merchant: 'SUPERMERCADO', amount: '86400.00', status: 'pending_review', source: 'gmail' })],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [account({ id: 'acc-1' })]),
+      listCategories: vi.fn(async () => []),
+      listMatches: listMatches as never,
+      mergeTransaction: mergeTransaction as never,
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    expect(await screen.findByText('Parece el mismo movimiento que:')).toBeInTheDocument()
+    expect(mergeTransaction).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Es el mismo' }))
+
+    await waitFor(() => expect(mergeTransaction).toHaveBeenCalledWith('p9', 'typed'))
+  })
+
+  it('lets the person say it is a different movement, and shows nothing when there is no candidate', async () => {
+    const user = userEvent.setup()
+    const other = transaction({ id: 'o1', merchant: 'Otro', amount: '10.00', status: 'confirmed', source: 'manual' })
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [
+          transaction({ id: 'p1', merchant: 'Con candidato', status: 'pending_review', source: 'gmail' }),
+          transaction({ id: 'p2', merchant: 'Sin candidato', status: 'pending_review', source: 'gmail' }),
+        ],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [account({ id: 'acc-1' })]),
+      listCategories: vi.fn(async () => []),
+      listMatches: vi.fn(async (id: string) => (id === 'p1' ? [other] : [])) as never,
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    expect(await screen.findAllByText(/el mismo movimiento que/)).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Es distinto' }))
+
+    expect(screen.queryByText(/el mismo movimiento que/)).not.toBeInTheDocument()
+  })
 })

@@ -58,7 +58,7 @@ _MOVEMENT_FORMS = (
     ),
     _form(
         NotificationKind.TRANSFER_OUT,
-        rf"transferiste\s+{_AMOUNT}\s+a\s+la\s+llave\s+\S+\s+desde\s+tu\s+cuenta\s+"
+        rf"transferiste\s+{_AMOUNT}\s+a\s+la\s+llave\s+(?P<key>\S+)\s+desde\s+tu\s+cuenta\s+"
         rf"\*{{0,2}}(?P<digits>\d+)\s+a\s+(?P<target>{_NAME}){_ON}",
     ),
     _form(
@@ -143,10 +143,20 @@ def _build_movement(form: _Form, match: re.Match[str], body: str) -> ParsedNotif
         currency=currency,
         merchant=_group(match, "merchant"),
         target_text=_group(match, "target"),
+        target_key=_key(match),
         last_digits=_digits(form, match, tail),
         occurred_at=moment,
         occurred_on=day,
     )
+
+
+def _key(match: re.Match[str]) -> str | None:
+    """The Bre-b key the money was sent to, when the text names one (`@alias`)."""
+    for name in ("key", "target"):
+        value = _group(match, name)
+        if value is not None and value.startswith("@"):
+            return value
+    return None
 
 
 def _digits(form: _Form, match: re.Match[str], tail: str) -> str | None:

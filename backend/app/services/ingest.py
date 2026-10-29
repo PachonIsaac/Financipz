@@ -122,7 +122,7 @@ def _build(db: Session, parsed: ParsedNotification, digest: str, moment: datetim
         transaction_type = TransactionType.TRANSFER
     elif kind is NotificationKind.TRANSFER_OUT:
         account = _by_digits(db, parsed.last_digits, currency)
-        target = _own_destination(db, parsed.target_text, currency)
+        target = _own_destination(db, parsed.target_key or parsed.target_text, currency)
         transaction_type = TransactionType.TRANSFER
     elif kind is NotificationKind.PAYROLL:
         account = _only_account(db, _SAVINGS, currency)

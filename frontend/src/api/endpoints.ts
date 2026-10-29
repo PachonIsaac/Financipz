@@ -62,6 +62,11 @@ export function createEndpoints(client: ApiClient) {
       request<Transaction>(`/transactions/${id}`, { method: 'PATCH', body }),
     deleteTransaction: (id: string) => request<void>(`/transactions/${id}`, { method: 'DELETE' }),
 
+    // Movements that may be the same one as a pending movement, and saying that they are.
+    listMatches: (id: string) => request<Transaction[]>(`/transactions/${id}/matches`),
+    mergeTransaction: (id: string, into: string) =>
+      request<Transaction>(`/transactions/${id}/merge`, { method: 'POST', body: { into } }),
+
     confirmTransaction: (id: string) => request<Transaction>(`/transactions/${id}/confirm`, { method: 'POST' }),
     discardTransaction: (id: string) => request<Transaction>(`/transactions/${id}/discard`, { method: 'POST' }),
 

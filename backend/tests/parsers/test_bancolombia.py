@@ -336,3 +336,27 @@ class TestUnrecognized:
         )
 
         assert result.kind is NotificationKind.PURCHASE
+
+
+class TestDestinationKey:
+    def test_a_transfer_to_a_key_keeps_the_key_and_the_name(self):
+        result = parse(
+            "Bancolombia: transferiste $50.000 a la llave @ejemplo desde tu cuenta *1234 a Persona Ejemplo "
+            "el 05/03/2026 a las 10:00."
+        )
+
+        assert result.kind is NotificationKind.TRANSFER_OUT
+        assert (result.target_key, result.target_text) == ("@ejemplo", "Persona Ejemplo")
+
+    def test_a_payment_by_qr_to_a_key_keeps_the_key(self):
+        result = parse(
+            "Bancolombia: Hola pagaste $20.000 por código QR desde tu cuenta *1234 a la llave @ejemplo "
+            "el 05/03/2026 a las 10:00."
+        )
+
+        assert result.target_key == "@ejemplo"
+
+    def test_a_transfer_to_an_account_number_has_no_key(self):
+        result = parse("Bancolombia: Transferiste $50.000 desde tu cuenta *1234 a la cuenta *5678, el 05/03/2026 a las 10:00.")
+
+        assert result.target_key is None

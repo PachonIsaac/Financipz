@@ -303,3 +303,17 @@ export function useDisconnectGmail() {
   const client = useQueryClient()
   return useMutation({ mutationFn: () => api.disconnectGmail(), onSuccess: () => refreshMail(client) })
 }
+
+export function useMatches(id: string) {
+  const api = useApi()
+  return useQuery({ queryKey: [...keys.transactions, 'matches', id], queryFn: () => api.listMatches(id) })
+}
+
+export function useMergeTransaction() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, into }: { id: string; into: string }) => api.mergeTransaction(id, into),
+    onSuccess: () => refreshMoney(client),
+  })
+}

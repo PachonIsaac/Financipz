@@ -52,6 +52,8 @@ class ParsedNotification:
     merchant: str | None = None
     # Destination of a transfer: a recipient name, a key or an account number.
     target_text: str | None = None
+    # The Bre-b key of the destination (`@alias`), when the text names one.
+    target_key: str | None = None
     last_digits: str | None = None
     # Timezone-aware moment. None when the text carries no time of day.
     occurred_at: datetime | None = None

@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.domain.entities import TransactionStatus, TransactionType
-from app.schemas.transactions import TransactionCreate, TransactionOut, TransactionPage, TransactionUpdate
+from app.schemas.transactions import MergeIn, TransactionCreate, TransactionOut, TransactionPage, TransactionUpdate
+from app.services import reconcile
 from app.services import transactions as service
 from app.services.transactions import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, TransactionFilters
 
@@ -75,3 +76,15 @@ def confirm_transaction(transaction_id: uuid.UUID, db: Session = Depends(get_db)
 @router.post("/{transaction_id}/discard", response_model=TransactionOut)
 def discard_transaction(transaction_id: uuid.UUID, db: Session = Depends(get_db)):
     return service.discard_transaction(db, transaction_id)
+
+
+@router.get("/{transaction_id}/matches", response_model=list[TransactionOut])
+def possible_matches(transaction_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Other movements that may be the same one as this pending movement: same amount, another source, within a day."""
+    return reconcile.candidates(db, service.get_transaction(db, transaction_id))
+
+
+@router.post("/{transaction_id}/merge", response_model=TransactionOut)
+def merge_into(transaction_id: uuid.UUID, body: MergeIn, db: Session = Depends(get_db)):
+    """Say that this pending movement is the same as another: the other one is kept and completed, this one is set aside."""
+    return reconcile.merge(db, transaction_id, body.into)

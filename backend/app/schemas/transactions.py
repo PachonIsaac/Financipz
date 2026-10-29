@@ -117,3 +117,9 @@ class AdjustmentResult(Output):
     # Null when the balance already matched and nothing was recorded.
     transaction: TransactionOut | None
     balance: Decimal
+
+
+class MergeIn(Input):
+    """The movement to keep. The one in the URL is the one that is set aside."""
+
+    into: uuid.UUID

@@ -1,11 +1,21 @@
 import { useState } from 'react'
-import { useConfirmTransaction, useDiscardTransaction, useTransactionList, useUpdateTransaction } from '../api/hooks'
+import {
+  useConfirmTransaction,
+  useDiscardTransaction,
+  useMatches,
+  useMergeTransaction,
+  useTransactionList,
+  useUpdateTransaction,
+} from '../api/hooks'
 import type { Account, Classification, Transaction } from '../api/types'
 import { errorMessage } from '../api/client'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
 import { useToast } from '../components/Toast'
+import { Amount } from '../components/Amount'
 import { Button, Card, SelectField } from '../components/ui'
+import { formatDateTime } from '../lib/dates'
+import { SOURCE_LABELS, TRANSACTION_TYPE_LABELS } from '../features/labels'
 import { useLookups } from '../features/lookups'
 import { TransactionRow } from '../features/transactions/TransactionRow'
 
@@ -85,6 +95,54 @@ function ClassifyTransfer({ tx, accounts }: { tx: Transaction; accounts: Account
   )
 }
 
+/** Movements that look like the same one (same amount, another source, within a day): the person decides. */
+function PossibleMatches({ tx }: { tx: Transaction }) {
+  const toast = useToast()
+  const matches = useMatches(tx.id)
+  const merge = useMergeTransaction()
+  const [dismissed, setDismissed] = useState(false)
+  const found = matches.data ?? []
+  if (dismissed || found.length === 0) return null
+
+  return (
+    <div className="mt-2 flex flex-col gap-2 rounded-2xl border border-amber-400/35 bg-amber-400/10 p-3">
+      <p className="text-[13px] font-medium text-amber-200">
+        {found.length === 1 ? 'Parece el mismo movimiento que:' : 'Podría ser el mismo que uno de estos:'}
+      </p>
+      <ul className="flex flex-col gap-2">
+        {found.map((other) => (
+          <li key={other.id} className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm">{other.merchant || TRANSACTION_TYPE_LABELS[other.type]}</p>
+              <p className="text-xs text-slate-400">
+                <Amount value={other.amount} currency={other.currency} tone="neutral" /> · {formatDateTime(other.date)} ·{' '}
+                {SOURCE_LABELS[other.source]}
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              disabled={merge.isPending}
+              onClick={() =>
+                merge.mutate({ id: tx.id, into: other.id }, { onSuccess: () => toast.show('Unidos: se conservó el otro movimiento') })
+              }
+            >
+              Es el mismo
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {merge.error ? (
+        <p role="alert" className="text-sm text-red-400">
+          {errorMessage(merge.error)}
+        </p>
+      ) : null}
+      <Button variant="ghost" onClick={() => setDismissed(true)}>
+        Es distinto
+      </Button>
+    </div>
+  )
+}
+
 /** For a movement that arrived without an account: choose it here before it can be confirmed. */
 function AccountPicker({ tx, accounts }: { tx: Transaction; accounts: Account[] }) {
   const toast = useToast()
@@ -158,6 +216,7 @@ export function ReviewScreen() {
               <ul>
                 <TransactionRow tx={tx} accounts={accounts} categories={categories} />
               </ul>
+              <PossibleMatches tx={tx} />
               {tx.account_id === null ? <AccountPicker tx={tx} accounts={[...accounts.values()]} /> : null}
               {tx.account_id !== null && tx.type === 'transfer' && tx.target_account_id === null && tx.classification === null ? (
                 <ClassifyTransfer tx={tx} accounts={[...accounts.values()]} />
