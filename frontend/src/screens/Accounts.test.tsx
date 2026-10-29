@@ -59,7 +59,6 @@ describe('accounts and the balance', () => {
 
     await user.click(await screen.findByText('Cuenta de ahorros'))
     expect(screen.queryByLabelText('Saldo inicial')).not.toBeInTheDocument()
-    expect(screen.getByText(/Solo se define al crear la cuenta/)).toBeInTheDocument()
-    expect(screen.getByText(/Saldo inicial:/)).toBeInTheDocument()
+    expect(screen.queryByText(/Saldo inicial/)).not.toBeInTheDocument()
   })
 })
