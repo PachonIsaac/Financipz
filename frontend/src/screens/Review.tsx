@@ -1,3 +1,4 @@
+import { useIsMutating } from '@tanstack/react-query'
 import { useState } from 'react'
 import {
   useConfirmTransaction,
@@ -98,6 +99,8 @@ function ClassifyTransfer({ tx, accounts }: { tx: Transaction; accounts: Account
 /** Movements that look like the same one (same amount, another source, within a day): the person decides. */
 function PossibleMatches({ tx }: { tx: Transaction }) {
   const toast = useToast()
+  // While any change is being saved, no other card can start one: two joins in opposite directions would drop both.
+  const saving = useIsMutating() > 0
   const matches = useMatches(tx.id)
   const merge = useMergeTransaction()
   const [dismissed, setDismissed] = useState(false)
@@ -121,7 +124,7 @@ function PossibleMatches({ tx }: { tx: Transaction }) {
             </div>
             <Button
               variant="secondary"
-              disabled={merge.isPending}
+              disabled={saving}
               onClick={() =>
                 merge.mutate({ id: tx.id, into: other.id }, { onSuccess: () => toast.show('Unidos: se conservó el otro movimiento') })
               }
@@ -192,7 +195,8 @@ export function ReviewScreen() {
   const discard = useDiscardTransaction()
   const { accounts, categories } = useLookups()
   const items = list.data?.pages.flatMap((p) => p.items) ?? []
-  const busy = confirm.isPending || discard.isPending
+  const saving = useIsMutating() > 0
+  const busy = confirm.isPending || discard.isPending || saving
   const actionError = confirm.error ?? discard.error
 
   return (
