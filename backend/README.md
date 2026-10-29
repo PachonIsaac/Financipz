@@ -12,6 +12,8 @@ pip install -r requirements-dev.txt
 cp .env.example .env   # then fill in the values locally
 ```
 
+For a reproducible install (the same versions that were tested), use `pip install -r requirements.txt -c constraints.txt`.
+
 ## Run
 
 ```bash
@@ -20,11 +22,31 @@ uvicorn app.main:app --reload
 
 Health check: `GET http://127.0.0.1:8000/api/v1/health`. The `database` field is `ok`, `unreachable`, or `not_configured`.
 
+## Settings
+
+All settings are environment variables (or entries in `.env`); `.env.example` lists them with comments.
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (`postgresql+psycopg://...`). |
+| `SUPABASE_URL` | Authentication provider, to verify access tokens. |
+| `ALLOWED_USER_IDS`, `ALLOWED_USER_EMAILS` | Who may use the API. Empty: protected routes answer `503`. |
+| `ALLOWED_ORIGINS` | Origins allowed by CORS (the app). |
+| `ENCRYPTION_KEY` | Fernet key that encrypts stored third-party credentials. |
+| `REFRESH_ON_STARTUP` | Refresh data in the background when the process starts, if it is stale. |
+| `REFRESH_MIN_INTERVAL_SECONDS` | Shortest time between two refreshes (default 300). |
+| `DOCS_ENABLED` | Serve `/docs` and the OpenAPI schema (default true; turn off on a public deployment). |
+| `BINANCE_SYNC_URL` | Another deployment of this API that reads the exchange (see Binance). |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `APP_URL` | Reading the mailbox (see Automatic ingestion). |
+| `GMAIL_SENDERS`, `GMAIL_FIRST_SYNC_DAYS` | Which addresses the bank's notifications come from, and how far back the first read goes. |
+
 ## Test
 
 ```bash
 pytest
 ```
+
+The integration tests need a database server: they use a separate `*_test` database on the configured server (or `TEST_DATABASE_URL`) and refuse to run on a database whose name does not end in `_test`. Nothing talks to the network: the exchange, the exchange-rate source and the mailbox are replaced with in-memory fakes.
 
 ## Authentication
 
@@ -62,7 +84,30 @@ python -m app.integrations.binance_connect   # asks for the key and the secret w
 python -m app.jobs.sync_binance              # stores today's balances and any new spot trades
 ```
 
+The exchange refuses requests that come from some countries. If this API runs in one of them, set `BINANCE_SYNC_URL` to the base URL (ending in `/api/v1`) of another deployment of this same API that runs elsewhere: the sync is then asked to that deployment with the same signed-in user, which checks the token itself, reads the exchange and writes to the same database. The startup refresh only reads the exchange rate in that case, because nobody is signed in then.
+
 The same actions are available as `PUT /api/v1/integrations/binance` (connect), `POST /api/v1/integrations/binance/sync`, `DELETE /api/v1/integrations/binance` and `GET /api/v1/integrations` (status, never secrets). The balance snapshot keeps one row per day, account and asset, so running the sync twice in a day updates it. Read the results with `GET /api/v1/crypto/portfolio`, `/crypto/history` and `/crypto/trades`.
+
+## Keeping data up to date
+
+`POST /api/v1/refresh` reads the exchange rate, the exchange balances and the mailbox, each in its own session, so one failing does not stop the others; the answer reports each source (`ok`, `not_connected` or `error`). Runs are serialized, and one that follows another too closely returns the previous result (`cached`). With `REFRESH_ON_STARTUP=true`, a refresh also runs in the background when the process starts, only if the data is stale, and never delays the service from answering. The jobs `python -m app.jobs.sync_trm` and `python -m app.jobs.sync_binance` do the same from a terminal.
+
+## Automatic ingestion
+
+Notifications from the bank (email) and the wallet (SMS) are turned into movements by the parsers in `app/parsers` and stored by the pipeline in `app/services/ingest.py`:
+
+- Every movement it creates is **pending review**: it counts in no balance, summary or chart until it is confirmed.
+- The same notification is stored once (a hash identifies it); a repeat is reported as a duplicate.
+- The account comes from the last digits and the currency, or from the only account of a type (for example, the one wallet). When that is not certain it is left empty, and the movement cannot be confirmed until one is chosen. A transfer to someone else needs a class (expense, loan, card payment or own transfer) before it is confirmed. Nothing is guessed.
+- The text of a notification is never stored, only the fields found in it.
+
+**iOS shortcut (SMS of the wallet).** `POST /api/v1/ingest/shortcut` takes `{"source": "sms_uala", "text": "...", "received_at": "<ISO 8601>"}` with the header `X-Ingest-Token`. The token is created with `POST /api/v1/ingest/shortcut/token/rotate` (signed-in user), shown once and kept only as a hash; rotating it invalidates the previous one. The route is rate limited and answers 201 (created), 409 (already received), 422 (not recognized) or 401 (bad token).
+
+**Mailbox (read-only).** Create an OAuth client of type "Web application" with the Gmail API enabled, register `GOOGLE_REDIRECT_URI` (this API's `/api/v1/integrations/gmail/callback`) as an authorized redirect address, and set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` and `APP_URL`. Then `POST /api/v1/integrations/gmail/connect` returns the consent address; the only permission requested is `gmail.readonly`, and the refresh token is stored encrypted. `POST /api/v1/integrations/gmail/sync` reads the messages of `GMAIL_SENDERS` that have not been read (each message once), starting from today on the first read unless `GMAIL_FIRST_SYNC_DAYS` says otherwise. `DELETE /api/v1/integrations/gmail` withdraws the permission.
+
+## Accounts and the balance
+
+Each account has `include_in_balance` (true by default). An account that is left out adds nothing to the available money, the card debt or the receivable loans; its movements still appear. Discarded movements never count and are left out of the movements list unless `status=discarded` is asked for.
 
 ## Notes
 

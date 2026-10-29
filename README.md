@@ -1,19 +1,25 @@
 # Financipz
 
-App personal para llevar las finanzas: registro de ingresos y gastos, cuentas, flujo de caja y patrimonio. Uso de un solo usuario, pensada como PWA.
+App personal para llevar las finanzas: registro de ingresos y gastos, cuentas, flujo de caja, patrimonio y cripto. Uso de un solo usuario, pensada como PWA.
+
+## Qué hace
+
+- Registra movimientos a mano y recibe los avisos del banco (por correo, solo lectura) y de la billetera (por SMS, con un atajo de iOS). Todo lo automático queda **pendiente de revisión** y no cuenta hasta que se confirma.
+- Calcula saldos por cuenta y moneda, el balance (disponible menos la deuda de tarjetas), el resumen del mes y el patrimonio en pesos con la TRM del día. Cada cuenta puede dejarse fuera del balance.
+- Lee en solo lectura el portafolio de Binance y guarda una instantánea por día.
 
 ## Stack
 
 - **Backend:** FastAPI, SQLAlchemy 2, Alembic y PostgreSQL.
-- **Frontend:** React y TypeScript como PWA (en desarrollo).
+- **Frontend:** React, TypeScript y Tailwind como PWA, solo en modo oscuro.
 
 ## Estructura
 
 | Carpeta | Contenido |
 |---|---|
-| [`backend/`](backend/) | API y esquema de base de datos |
-| `frontend/` | PWA (próximamente) |
+| [`backend/`](backend/) | API, parsers y esquema de base de datos |
+| [`frontend/`](frontend/) | PWA |
 
 ## Estado
 
-En desarrollo. Ver [`backend/README.md`](backend/README.md) para correr el backend y las pruebas.
+En uso. Ver [`backend/README.md`](backend/README.md) y [`frontend/README.md`](frontend/README.md) para correr cada parte y las pruebas.
