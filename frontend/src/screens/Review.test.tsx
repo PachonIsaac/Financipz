@@ -151,4 +151,24 @@ describe('review inbox', () => {
 
     expect(screen.queryByText(/el mismo movimiento que/)).not.toBeInTheDocument()
   })
+
+  it('explains how to continue when there is no account in the currency of the movement', async () => {
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [transaction({ id: 'usd1', merchant: 'COMPRA EN DOLARES', currency: 'USD', status: 'pending_review', source: 'gmail', account_id: null })],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [
+        account({ id: 'cop', name: 'Tarjeta en pesos', type: 'credit_card' }),
+        account({ id: 'exchange', name: 'Exchange', type: 'exchange', currency: 'USD' }),
+      ]),
+      listCategories: vi.fn(async () => []),
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    expect(await screen.findByText(/No tienes una cuenta en USD/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Ir a Cuentas' })).toHaveAttribute('href', '/more/accounts')
+    // An exchange account in dollars is not offered as the place a purchase was paid from.
+    expect(screen.queryByRole('option', { name: 'Exchange' })).not.toBeInTheDocument()
+  })
 })

@@ -1,5 +1,6 @@
 import { useIsMutating } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   useConfirmTransaction,
   useDiscardTransaction,
@@ -151,12 +152,29 @@ function AccountPicker({ tx, accounts }: { tx: Transaction; accounts: Account[] 
   const toast = useToast()
   const update = useUpdateTransaction(tx.id)
   const [accountId, setAccountId] = useState('')
-  // A movement keeps the currency it arrived in.
-  const options = accounts.filter((a) => !a.archived && a.currency === tx.currency && a.id !== tx.target_account_id)
+  // A movement keeps the currency it arrived in, and money held on an exchange or lent out is not spent from there.
+  const options = accounts.filter(
+    (a) =>
+      !a.archived &&
+      a.currency === tx.currency &&
+      a.id !== tx.target_account_id &&
+      a.type !== 'exchange' &&
+      a.type !== 'system' &&
+      a.type !== 'loan',
+  )
 
   return (
     <div className="mt-2 flex flex-col gap-2 px-1 pb-2">
       <p className="text-[13px] text-amber-300">No se pudo saber a qué cuenta pertenece.</p>
+      {options.length === 0 ? (
+        <p className="text-sm text-slate-300">
+          No tienes una cuenta en {tx.currency} para este movimiento. Si es una tarjeta que también compra en otra moneda,
+          crea su cuenta en {tx.currency} con los mismos últimos 4 dígitos.{' '}
+          <Link to="/more/accounts" className="font-medium text-emerald-500 underline">
+            Ir a Cuentas
+          </Link>
+        </p>
+      ) : null}
       <div className="flex items-end gap-2">
         <div className="min-w-0 flex-1">
           <SelectField label="Cuenta" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
