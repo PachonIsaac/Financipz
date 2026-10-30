@@ -1,7 +1,8 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { account, fakeApi, renderWithApp, transaction } from '../test/utils'
+import { ApiError } from '../api/client'
+import { account, category, fakeApi, renderWithApp, transaction } from '../test/utils'
 import { ReviewScreen } from './Review'
 
 describe('review inbox', () => {
@@ -170,5 +171,85 @@ describe('review inbox', () => {
     expect(screen.getByRole('link', { name: 'Ir a Cuentas' })).toHaveAttribute('href', '/more/accounts')
     // An exchange account in dollars is not offered as the place a purchase was paid from.
     expect(screen.queryByRole('option', { name: 'Exchange' })).not.toBeInTheDocument()
+  })
+
+  it('chooses the category on the card and saves it with the confirmation', async () => {
+    const user = userEvent.setup()
+    const calls: string[] = []
+    const updateTransaction = vi.fn(async () => {
+      calls.push('update')
+      return transaction({ id: 'c1' })
+    })
+    const confirmTransaction = vi.fn(async () => {
+      calls.push('confirm')
+      return transaction({ id: 'c1' })
+    })
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [transaction({ id: 'c1', merchant: 'Sin categoría aún', status: 'pending_review', source: 'gmail', category_id: null })],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [account({ id: 'acc-1' })]),
+      listCategories: vi.fn(async () => [category({ id: 'cat-food', name: 'Mercado' }), category({ id: 'cat-pay', name: 'Sueldo', type: 'income' })]),
+      updateTransaction: updateTransaction as never,
+      confirmTransaction: confirmTransaction as never,
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    await screen.findByText('Sin categoría aún')
+    // Only the categories of the type of the movement are offered.
+    expect(screen.queryByRole('option', { name: 'Sueldo' })).not.toBeInTheDocument()
+    await user.selectOptions(screen.getByLabelText('Categoría'), 'cat-food')
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    await waitFor(() => expect(confirmTransaction).toHaveBeenCalledWith('c1'))
+    expect(updateTransaction).toHaveBeenCalledWith('c1', { category_id: 'cat-food' })
+    expect(calls).toEqual(['update', 'confirm'])
+  })
+
+  it('confirms without touching the movement when the category was not changed, and does not confirm if saving it fails', async () => {
+    const user = userEvent.setup()
+    const confirmTransaction = vi.fn(async () => transaction({ id: 'c2' }))
+    const updateTransaction = vi.fn(async () => {
+      throw new ApiError(422, 'validation_error', 'La categoría no es válida.')
+    })
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [transaction({ id: 'c2', merchant: 'Con categoría', status: 'pending_review', source: 'gmail', category_id: 'cat-food' })],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [account({ id: 'acc-1' })]),
+      listCategories: vi.fn(async () => [category({ id: 'cat-food', name: 'Mercado' }), category({ id: 'cat-gas', name: 'Gasolina' })]),
+      updateTransaction: updateTransaction as never,
+      confirmTransaction: confirmTransaction as never,
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    await screen.findByText('Con categoría')
+    expect(screen.getByLabelText('Categoría')).toHaveValue('cat-food')
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await waitFor(() => expect(confirmTransaction).toHaveBeenCalledWith('c2'))
+    expect(updateTransaction).not.toHaveBeenCalled()
+
+    confirmTransaction.mockClear()
+    await user.selectOptions(screen.getByLabelText('Categoría'), 'cat-gas')
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    expect(await screen.findByText('La categoría no es válida.')).toBeInTheDocument()
+    expect(confirmTransaction).not.toHaveBeenCalled()
+  })
+
+  it('does not offer a category on a transfer', async () => {
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [transaction({ id: 't9', type: 'transfer', status: 'pending_review', source: 'gmail', classification: 'own_transfer', target_account_id: 'acc-2' })],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [account({ id: 'acc-1' }), account({ id: 'acc-2', name: 'Otra' })]),
+      listCategories: vi.fn(async () => [category({ id: 'cat-food', name: 'Mercado' })]),
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    await screen.findByRole('button', { name: 'Confirmar' })
+    expect(screen.queryByLabelText('Categoría')).not.toBeInTheDocument()
   })
 })

@@ -9,7 +9,7 @@ import {
   useTransactionList,
   useUpdateTransaction,
 } from '../api/hooks'
-import type { Account, Classification, Transaction } from '../api/types'
+import type { Account, Category, CategoryType, Classification, Transaction } from '../api/types'
 import { errorMessage } from '../api/client'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
@@ -18,6 +18,7 @@ import { Amount } from '../components/Amount'
 import { Button, Card, SelectField } from '../components/ui'
 import { formatDateTime } from '../lib/dates'
 import { SOURCE_LABELS, TRANSACTION_TYPE_LABELS } from '../features/labels'
+import { categoryOptions } from '../features/transactions/display'
 import { useLookups } from '../features/lookups'
 import { TransactionRow } from '../features/transactions/TransactionRow'
 
@@ -206,6 +207,77 @@ function AccountPicker({ tx, accounts }: { tx: Transaction; accounts: Account[] 
 
 export const PENDING_FILTER = { status: 'pending_review' } as const
 
+/** A pending movement with what the person can decide on it: the category, and whether to keep it or not. */
+function PendingCard({
+  tx,
+  accounts,
+  categories,
+  busy,
+  onConfirm,
+  onDiscard,
+}: {
+  tx: Transaction
+  accounts: Map<string, Account>
+  categories: Map<string, Category>
+  busy: boolean
+  onConfirm: (id: string) => void
+  onDiscard: (id: string) => void
+}) {
+  const update = useUpdateTransaction(tx.id)
+  const [categoryId, setCategoryId] = useState(tx.category_id ?? '')
+  const takesCategory = tx.type === 'expense' || tx.type === 'income'
+  const options = takesCategory ? categoryOptions([...categories.values()], tx.type as CategoryType) : []
+  const needsClass = tx.type === 'transfer' && tx.target_account_id === null && tx.classification === null
+
+  // The category chosen here is saved together with the confirmation, so the movement never ends up without it.
+  async function confirm() {
+    if (takesCategory && categoryId !== (tx.category_id ?? '')) {
+      try {
+        await update.mutateAsync({ category_id: categoryId || null })
+      } catch {
+        return
+      }
+    }
+    onConfirm(tx.id)
+  }
+
+  return (
+    <Card className="p-2">
+      <ul>
+        <TransactionRow tx={tx} accounts={accounts} categories={categories} />
+      </ul>
+      <PossibleMatches tx={tx} />
+      {tx.account_id === null ? <AccountPicker tx={tx} accounts={[...accounts.values()]} /> : null}
+      {tx.account_id !== null && needsClass ? <ClassifyTransfer tx={tx} accounts={[...accounts.values()]} /> : null}
+      {takesCategory ? (
+        <div className="mt-2 px-1">
+          <SelectField label="Categoría" value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+            <option value="">Sin categoría</option>
+            {options.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </SelectField>
+        </div>
+      ) : null}
+      {update.error ? (
+        <p role="alert" className="mt-2 px-1 text-sm text-red-400">
+          {errorMessage(update.error)}
+        </p>
+      ) : null}
+      <div className="mt-2 grid grid-cols-2 gap-2 px-1 pb-1">
+        <Button variant="secondary" disabled={busy} onClick={() => onDiscard(tx.id)}>
+          Descartar
+        </Button>
+        <Button disabled={busy || tx.account_id === null || needsClass} onClick={() => void confirm()}>
+          Confirmar
+        </Button>
+      </div>
+    </Card>
+  )
+}
+
 export function ReviewScreen() {
   const toast = useToast()
   const list = useTransactionList(PENDING_FILTER)
@@ -234,31 +306,15 @@ export function ReviewScreen() {
             </p>
           ) : null}
           {items.map((tx) => (
-            <Card key={tx.id} className="p-2">
-              <ul>
-                <TransactionRow tx={tx} accounts={accounts} categories={categories} />
-              </ul>
-              <PossibleMatches tx={tx} />
-              {tx.account_id === null ? <AccountPicker tx={tx} accounts={[...accounts.values()]} /> : null}
-              {tx.account_id !== null && tx.type === 'transfer' && tx.target_account_id === null && tx.classification === null ? (
-                <ClassifyTransfer tx={tx} accounts={[...accounts.values()]} />
-              ) : null}
-              <div className="grid grid-cols-2 gap-2 px-1 pb-1">
-                <Button
-                  variant="secondary"
-                  disabled={busy}
-                  onClick={() => discard.mutate(tx.id, { onSuccess: () => toast.show('Movimiento descartado') })}
-                >
-                  Descartar
-                </Button>
-                <Button
-                  disabled={busy || tx.account_id === null || (tx.type === 'transfer' && tx.target_account_id === null && tx.classification === null)}
-                  onClick={() => confirm.mutate(tx.id, { onSuccess: () => toast.show('Movimiento confirmado') })}
-                >
-                  Confirmar
-                </Button>
-              </div>
-            </Card>
+            <PendingCard
+              key={tx.id}
+              tx={tx}
+              accounts={accounts}
+              categories={categories}
+              busy={busy}
+              onConfirm={(id) => confirm.mutate(id, { onSuccess: () => toast.show('Movimiento confirmado') })}
+              onDiscard={(id) => discard.mutate(id, { onSuccess: () => toast.show('Movimiento descartado') })}
+            />
           ))}
           {list.hasNextPage ? (
             <Button variant="secondary" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
