@@ -44,9 +44,13 @@ def callback(
 
 
 @router.post("/sync", response_model=GmailSyncOut, dependencies=[Depends(get_current_user)])
-def sync(db: Session = Depends(get_db), settings: Settings = Depends(get_settings)):
+def sync(
+    days: int | None = Query(None, ge=1, le=60, description="Look this many days back instead of from the last read."),
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
     """Read the bank's new messages and store them as pending movements."""
-    return gmail_sync.sync(db, settings)
+    return gmail_sync.sync(db, settings, days)
 
 
 @router.delete("", status_code=204, dependencies=[Depends(get_current_user)])

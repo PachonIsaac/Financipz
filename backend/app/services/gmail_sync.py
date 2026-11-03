@@ -133,10 +133,13 @@ def _connected(db: Session) -> models.Integration:
     return row
 
 
+def _start_of_today(now: datetime) -> datetime:
+    return now.astimezone(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
 def _first_read_start(settings: Settings, now: datetime) -> datetime:
     """The start of today in Colombia, minus the days asked for."""
-    today = now.astimezone(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0)
-    return today - timedelta(days=settings.gmail_first_sync_days)
+    return _start_of_today(now) - timedelta(days=settings.gmail_first_sync_days)
 
 
 def _query(settings: Settings, since: datetime) -> str:
@@ -150,10 +153,14 @@ def _from_a_known_sender(settings: Settings, sender: str) -> bool:
     return address in {item.lower() for item in settings.senders}
 
 
-def sync(db: Session, settings: Settings) -> GmailSyncResult:
-    """Read the messages of the bank that have not been read yet and store what they say as pending movements."""
+def sync(db: Session, settings: Settings, days: int | None = None) -> GmailSyncResult:
+    """Read the messages of the bank that have not been read yet and store what they say as pending movements.
+
+    With `days`, the read goes back that many days before today, whatever the last read was. What was already
+    read is skipped, so looking further back never repeats a movement.
+    """
     with _sync_lock:
-        return _sync(db, settings)
+        return _sync(db, settings, days)
 
 
 def _revoked(db: Session, row: models.Integration) -> ApiError:
@@ -164,11 +171,14 @@ def _revoked(db: Session, row: models.Integration) -> ApiError:
     return ApiError(409, "gmail_access_revoked", ACCESS_REVOKED.message)
 
 
-def _sync(db: Session, settings: Settings) -> GmailSyncResult:
+def _sync(db: Session, settings: Settings, days: int | None) -> GmailSyncResult:
     _configured(settings)
     row = _connected(db)
     now = datetime.now(UTC)
-    since = (row.last_synced_at - OVERLAP) if row.last_synced_at else _first_read_start(settings, now)
+    if days is not None:
+        since = _start_of_today(now) - timedelta(days=days)
+    else:
+        since = (row.last_synced_at - OVERLAP) if row.last_synced_at else _first_read_start(settings, now)
 
     try:
         refresh_token = decrypt_json(settings.encryption_key, row.encrypted_secret)["refresh_token"]

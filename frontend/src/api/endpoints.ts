@@ -89,7 +89,8 @@ export function createEndpoints(client: ApiClient) {
 
     // The browser cannot send the session on a redirect, so the app asks for the address and opens it.
     connectGmail: () => request<{ authorization_url: string }>('/integrations/gmail/connect', { method: 'POST' }),
-    syncGmail: () => request<GmailSyncResult>('/integrations/gmail/sync', { method: 'POST', timeoutMs: 120_000 }),
+    syncGmail: (days?: number) =>
+      request<GmailSyncResult>('/integrations/gmail/sync', { method: 'POST', query: { days }, timeoutMs: 120_000 }),
     disconnectGmail: () => request<void>('/integrations/gmail', { method: 'DELETE' }),
 
     // Reads the exchange rate and the exchange balances; a sleeping server may need a while.

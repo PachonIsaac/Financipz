@@ -86,6 +86,11 @@ _MOVEMENT_FORMS = (
         rf"Retiraste\s+{_AMOUNT}\s+en\s+(?P<merchant>{_NAME})\s+de\s+tu\s+T\.Deb\s*\*+(?P<digits>\d+){_ON}",
     ),
     _form(
+        # A withdrawal at a correspondent: no card is named, and the place comes with its city.
+        NotificationKind.WITHDRAWAL,
+        rf"Retiraste\s+{_AMOUNT}\s+en\s+nuestro\s+corresponsal\s+(?P<merchant>{_NAME}),?{_ON}",
+    ),
+    _form(
         NotificationKind.SCHEDULED_BILL,
         rf"Pago\s+Factura\s+Programada\s+(?P<merchant>{_NAME})\s+\d+\s+por\s+{_AMOUNT}\s+"
         rf"desde\s+TC\s*\*+(?P<digits>\d+)\.\s*(?=\d)",

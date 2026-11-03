@@ -164,7 +164,7 @@ def test_the_first_read_can_go_back_some_days_and_the_next_one_starts_a_day_befo
     app.dependency_overrides[get_settings] = lambda: configured(gmail_first_sync_days=30)
     client.post(f"{API}/integrations/gmail/sync")
     first = connected.queries()[0]
-    assert "from:(alertasynotificaciones@ayn.notificacionesbancolombia.com)" in first
+    assert "from:(alertasynotificaciones@ayn.notificacionesbancolombia.com OR alertasynotificaciones@an.notificacionesbancolombia.com)" in first
     month_ago = int((datetime.now(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=30)).timestamp())
     assert int(first.rsplit("after:", 1)[1]) == month_ago
 
@@ -318,3 +318,29 @@ def test_the_refresh_does_not_call_a_missing_provider_setting_an_error(client, d
     body = client.post(f"{API}/refresh").json()
 
     assert body["gmail"]["status"] == "not_connected"
+
+
+def test_both_addresses_of_the_bank_are_read_and_a_wider_window_can_be_asked_for(client, db, connected):
+    savings = create_account(client, name="Savings", type="savings")
+    connected.messages = {
+        "old": plain_message(
+            "Bancolombia: Retiraste $50,000 en nuestro corresponsal CORRESPONSAL EJEMPLO en CIUDAD EJEMPLO, el 31/10/26 a las 16:51.",
+            sender="alertasynotificaciones@an.notificacionesbancolombia.com",
+        )
+    }
+    client.post(f"{API}/integrations/gmail/sync")
+    assert "alertasynotificaciones@an.notificacionesbancolombia.com" in connected.queries()[0]
+    assert "alertasynotificaciones@ayn.notificacionesbancolombia.com" in connected.queries()[0]
+
+    again = client.post(f"{API}/integrations/gmail/sync", params={"days": 7}).json()
+
+    # What was read is not read again, but the window went back a week from today, whatever the last read was.
+    week_ago = int((datetime.now(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)).timestamp())
+    assert int(connected.queries()[-1].rsplit("after:", 1)[1]) == week_ago
+    assert again["processed"] == 0
+    assert savings["id"]
+
+
+def test_the_wider_window_is_bounded(client, connected):
+    assert client.post(f"{API}/integrations/gmail/sync", params={"days": 0}).status_code == 422
+    assert client.post(f"{API}/integrations/gmail/sync", params={"days": 61}).status_code == 422

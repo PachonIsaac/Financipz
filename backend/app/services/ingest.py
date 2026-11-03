@@ -46,6 +46,7 @@ class IngestResult:
 _SAVINGS = (AccountType.SAVINGS,)
 _WALLET = (AccountType.WALLET,)
 _CASH = (AccountType.CASH,)
+_BANK = (AccountType.SAVINGS, AccountType.BANK)
 
 # Names of the categories that Ualá's daily return and card bonus belong to (RF-31).
 _CATEGORY_NAMES = {
@@ -118,6 +119,9 @@ def _build(db: Session, parsed: ParsedNotification, digest: str, moment: datetim
         classification = Classification.OWN_TRANSFER
     elif kind is NotificationKind.WITHDRAWAL:
         account = _by_digits(db, parsed.last_digits, currency)
+        if account is None and parsed.last_digits is None:
+            # A withdrawal at a correspondent names no card: it came out of the person's only bank account.
+            account = _only_account(db, _BANK, currency)
         target = _only_account(db, _CASH, currency)
         transaction_type = TransactionType.TRANSFER
     elif kind is NotificationKind.TRANSFER_OUT:

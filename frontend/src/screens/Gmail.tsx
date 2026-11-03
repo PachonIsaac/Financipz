@@ -112,11 +112,14 @@ export function GmailScreen() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-2">
-                  <Button disabled={sync.isPending} onClick={() => sync.mutate()}>
+                  <Button disabled={sync.isPending} onClick={() => sync.mutate(undefined)}>
                     {sync.isPending ? 'Leyendo…' : 'Leer ahora'}
                   </Button>
                   <Button variant="danger" onClick={() => setConfirming(true)}>
                     Desconectar
+                  </Button>
+                  <Button variant="secondary" className="col-span-2" disabled={sync.isPending} onClick={() => sync.mutate(7)}>
+                    Revisar los últimos 7 días
                   </Button>
                 </div>
               )}

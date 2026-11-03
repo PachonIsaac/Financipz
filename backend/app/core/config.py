@@ -38,7 +38,9 @@ class Settings(BaseSettings):
     google_redirect_uri: str = ""
     app_url: str = "http://localhost:5173/"
     # Comma-separated addresses the bank's notifications come from.
-    gmail_senders: str = "alertasynotificaciones@ayn.notificacionesbancolombia.com"
+    gmail_senders: str = (
+        "alertasynotificaciones@ayn.notificacionesbancolombia.com,alertasynotificaciones@an.notificacionesbancolombia.com"
+    )
     # How far back the first read goes, in days before today. 0: from the start of today (Colombian time), so
     # connecting never pulls in an old backlog.
     gmail_first_sync_days: int = 0

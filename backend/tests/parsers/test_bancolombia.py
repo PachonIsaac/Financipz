@@ -360,3 +360,17 @@ class TestDestinationKey:
         result = parse("Bancolombia: Transferiste $50.000 desde tu cuenta *1234 a la cuenta *5678, el 05/03/2026 a las 10:00.")
 
         assert result.target_key is None
+
+
+class TestWithdrawalAtACorrespondent:
+    TEXT = (
+        "¡Listo! Todo salió bien con tus movimientos Bancolombia: Retiraste $50,000 en nuestro corresponsal "
+        "CORRESPONSAL EJEMPLO en CIUDAD EJEMPLO, el 31/10/26 a las 16:51. Si tienes dudas, hablemos."
+    )
+
+    def test_it_reads_the_amount_the_place_and_a_two_digit_year(self):
+        result = parse_bancolombia(self.TEXT)
+
+        assert result.kind is NotificationKind.WITHDRAWAL
+        assert (result.amount, result.merchant, result.last_digits) == (Decimal("50000"), "CORRESPONSAL EJEMPLO en CIUDAD EJEMPLO", None)
+        assert result.occurred_at == at(2026, 10, 31, 16, 51)

@@ -79,4 +79,16 @@ describe('mail connection', () => {
     expect(await screen.findByText(/No se concedió el permiso de lectura/)).toBeInTheDocument()
     expect(await screen.findByText('Google retiró el permiso.')).toBeInTheDocument()
   })
+
+  it('can look back a week, for messages the last read did not catch', async () => {
+    const syncGmail = vi.fn(async () => ({ processed: 1, created: 1, duplicates: 0, ignored: 0, unrecognized: 0, last_synced_at: '2026-11-02T21:00:00Z', more: false }))
+    setup(connected, { syncGmail })
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Revisar los últimos 7 días' }))
+
+    await waitFor(() => expect(syncGmail).toHaveBeenCalledWith(7))
+    expect(await screen.findByText('Correos leídos: 1.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Leer ahora' }))
+    await waitFor(() => expect(syncGmail).toHaveBeenLastCalledWith(undefined))
+  })
 })

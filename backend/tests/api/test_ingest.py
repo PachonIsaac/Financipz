@@ -25,6 +25,10 @@ TRANSFER_OUT_OWN = "Bancolombia: Transferiste $50.000 desde tu cuenta *1234 a la
 TRANSFER_IN = "Bancolombia: Recibiste una transferencia por $100.000 de Persona Ejemplo en tu cuenta *1234, el 05/03/2026 a las 11:00."
 PAYROLL = "Bancolombia: Recibiste un pago de Nómina de EMPRESA EJEMPLO por $2.000.000 en tu cuenta de Ahorros el 05/03/2026 a las 08:00."
 WITHDRAWAL = "Bancolombia: Retiraste $100.000 en CAJERO EJEMPLO 1 de tu T.Deb **1234 el 05/03/2026 a las 12:00."
+CORRESPONDENT_WITHDRAWAL = (
+    "¡Listo! Todo salió bien con tus movimientos Bancolombia: Retiraste $50,000 en nuestro corresponsal "
+    "CORRESPONSAL EJEMPLO en CIUDAD EJEMPLO, el 31/10/26 a las 16:51. Si tienes dudas, hablemos."
+)
 FAILED = "Bancolombia: Tu compra por $5.000 en TIENDA EJEMPLO no fue exitosa, el 05/03/2026 a las 14:25."
 UALA_PAYMENT = "Ualá Pagaste $50000 en TIENDA EJEMPLO MEDELLIN COL 🏦"
 UALA_TOP_UP = "¡Tu recarga por PSE está lista! 💰 Realizaste una recarga por $250000 a tu cuenta Ualá."
@@ -269,3 +273,21 @@ def test_a_transfer_to_a_person_classified_as_a_card_payment_takes_the_card_as_d
     assert response.status_code == 200, response.text
     assert (response.json()["classification"], response.json()["target_account_id"]) == ("payment", paid["id"])
     assert response.json()["account_id"] == bank_account["id"]
+
+
+def test_a_withdrawal_at_a_correspondent_comes_out_of_the_only_bank_account_and_goes_to_cash(client, db):
+    savings = create_account(client, name="Savings", type="savings")
+    cash = create_account(client, name="Cash", type="cash")
+
+    row = ingest.ingest(db, bank(CORRESPONDENT_WITHDRAWAL)).transaction
+
+    assert (row.type, str(row.account_id), str(row.target_account_id), row.classification) == (
+        "transfer", savings["id"], cash["id"], "own_transfer",
+    )
+
+
+def test_a_withdrawal_at_a_correspondent_with_two_bank_accounts_assumes_neither(client, db):
+    create_account(client, name="Savings", type="savings")
+    create_account(client, name="Checking", type="bank")
+
+    assert ingest.ingest(db, bank(CORRESPONDENT_WITHDRAWAL)).transaction.account_id is None

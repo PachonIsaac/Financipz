@@ -295,7 +295,8 @@ export function useConnectGmail() {
 export function useSyncGmail() {
   const api = useApi()
   const client = useQueryClient()
-  return useMutation({ mutationFn: () => api.syncGmail(), onSettled: () => refreshMail(client) })
+  // With `days`, the read goes back that many days from today instead of from the last read.
+  return useMutation({ mutationFn: (days?: number) => api.syncGmail(days), onSettled: () => refreshMail(client) })
 }
 
 export function useDisconnectGmail() {
