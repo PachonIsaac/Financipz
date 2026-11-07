@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 
-from pydantic import AwareDatetime, Field, field_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from app.domain.entities import (
     LOCAL_TIMEZONE,
@@ -107,10 +107,20 @@ class AdjustmentCreate(Input):
     """Take the account's balance to the value you observe (for example, counting your cash)."""
 
     observed_balance: Money
-    note: Annotated[str, Field(min_length=1, max_length=500)]
+    # Required for an adjustment, optional for interest (see `as_interest`).
+    note: Annotated[str, Field(max_length=500)] = ""
     date: datetime | None = None
+    # The difference is interest the account earned, not a correction: it is recorded as an income.
+    as_interest: bool = False
 
     _local_date = field_validator("date")(as_local_aware)
+
+    @model_validator(mode="after")
+    def note_unless_interest(self) -> "AdjustmentCreate":
+        # Only a missing note is refused here; a blank one is answered by the service with its own code.
+        if not self.as_interest and not self.note:
+            raise ValueError("a balance adjustment needs a note")
+        return self
 
 
 class AdjustmentResult(Output):

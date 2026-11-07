@@ -156,8 +156,11 @@ export interface TransactionFilters {
 
 export interface AdjustmentCreate {
   observed_balance: string
-  note: string
+  /** Required for an adjustment; interest needs none. */
+  note?: string
   date?: string
+  /** The difference is interest the account earned: it is recorded as an income. */
+  as_interest?: boolean
 }
 
 export interface AdjustmentResult {

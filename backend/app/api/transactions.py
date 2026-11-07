@@ -88,3 +88,9 @@ def possible_matches(transaction_id: uuid.UUID, db: Session = Depends(get_db)):
 def merge_into(transaction_id: uuid.UUID, body: MergeIn, db: Session = Depends(get_db)):
     """Say that this pending movement is the same as another: the other one is kept and completed, this one is set aside."""
     return reconcile.merge(db, transaction_id, body.into)
+
+
+@router.post("/{transaction_id}/mark-interest", response_model=TransactionOut)
+def mark_interest(transaction_id: uuid.UUID, db: Session = Depends(get_db)):
+    """Turn a positive balance adjustment into interest (an income). Its amount and the balance do not change."""
+    return TransactionOut.model_validate(service.mark_as_interest(db, transaction_id))

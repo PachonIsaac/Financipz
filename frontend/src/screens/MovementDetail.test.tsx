@@ -83,3 +83,33 @@ describe('movement detail screen', () => {
     await waitFor(() => expect(updateTransaction).toHaveBeenCalledWith('t1', { amount: '50000.00' }))
   })
 })
+
+describe('positive balance adjustments', () => {
+  function setupAdjustment(type: 'adjustment_in' | 'adjustment_out') {
+    const markInterest = vi.fn(async () => transaction({ id: 'adj', type: 'income' }))
+    const api = fakeApi({
+      getTransaction: vi.fn(async () => transaction({ id: 'adj', type, amount: '500.00', note: 'Conté', source: 'manual' })),
+      listAccounts: vi.fn(async () => [account({ id: 'acc-1' })]),
+      listCategories: vi.fn(async () => []),
+      markInterest,
+    })
+    renderWithApp(<MovementDetailScreen />, { api, route: '/movements/adj', path: '/movements/:id' })
+    return { markInterest }
+  }
+
+  it('can be marked as interest', async () => {
+    const user = userEvent.setup()
+    const { markInterest } = setupAdjustment('adjustment_in')
+
+    await user.click(await screen.findByRole('button', { name: 'Marcar como intereses' }))
+
+    await waitFor(() => expect(markInterest).toHaveBeenCalledWith('adj'))
+  })
+
+  it('offers nothing of the kind on a negative adjustment', async () => {
+    setupAdjustment('adjustment_out')
+
+    await screen.findByText('Conté')
+    expect(screen.queryByRole('button', { name: 'Marcar como intereses' })).not.toBeInTheDocument()
+  })
+})

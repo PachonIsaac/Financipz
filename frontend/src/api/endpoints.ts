@@ -60,6 +60,7 @@ export function createEndpoints(client: ApiClient) {
       request<Transaction>('/transactions', { method: 'POST', body }),
     updateTransaction: (id: string, body: TransactionUpdate) =>
       request<Transaction>(`/transactions/${id}`, { method: 'PATCH', body }),
+    markInterest: (id: string) => request<Transaction>(`/transactions/${id}/mark-interest`, { method: 'POST' }),
     deleteTransaction: (id: string) => request<void>(`/transactions/${id}`, { method: 'DELETE' }),
 
     // Movements that may be the same one as a pending movement, and saying that they are.

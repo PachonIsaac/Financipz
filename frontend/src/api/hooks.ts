@@ -318,3 +318,9 @@ export function useMergeTransaction() {
     onSuccess: () => refreshMoney(client),
   })
 }
+
+export function useMarkInterest() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({ mutationFn: (id: string) => api.markInterest(id), onSuccess: () => refreshMoney(client) })
+}

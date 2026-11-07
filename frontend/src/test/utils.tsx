@@ -27,6 +27,7 @@ export function fakeApi(overrides: Partial<Endpoints> = {}): Endpoints {
     createTransaction: unmocked('createTransaction'),
     updateTransaction: unmocked('updateTransaction'),
     deleteTransaction: unmocked('deleteTransaction'),
+    markInterest: unmocked('markInterest'),
     getSummary: unmocked('getSummary'),
     getWealth: unmocked('getWealth'),
     refreshData: unmocked('refreshData'),

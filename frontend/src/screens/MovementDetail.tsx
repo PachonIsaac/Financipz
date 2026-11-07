@@ -6,7 +6,11 @@ import {
   useCategories,
   useConfirmTransaction,
   useDeleteTransaction,
-  useDiscardTransaction, useTransaction, useUpdateTransaction } from '../api/hooks'
+  useDiscardTransaction,
+  useMarkInterest,
+  useTransaction,
+  useUpdateTransaction,
+} from '../api/hooks'
 import type { Transaction } from '../api/types'
 import { Amount } from '../components/Amount'
 import { PageHeader } from '../components/Layout'
@@ -53,6 +57,7 @@ export function MovementDetailScreen() {
   const categories = useCategories()
   const update = useUpdateTransaction(id)
   const confirm = useConfirmTransaction()
+  const markInterest = useMarkInterest()
   const discard = useDiscardTransaction()
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -222,6 +227,14 @@ export function MovementDetailScreen() {
             {editable ? (
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 Editar
+              </Button>
+            ) : tx.type === 'adjustment_in' && tx.status === 'confirmed' ? (
+              <Button
+                variant="secondary"
+                disabled={markInterest.isPending}
+                onClick={() => markInterest.mutate(tx.id, { onSuccess: () => toast.show('Marcado como intereses') })}
+              >
+                {markInterest.isPending ? 'Guardando…' : 'Marcar como intereses'}
               </Button>
             ) : (
               <span />

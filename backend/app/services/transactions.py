@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
@@ -226,12 +226,37 @@ def create_adjustment(db: Session, account_id: uuid.UUID, data: AdjustmentCreate
 
     balance = account_balances(db, {account.id})[account.id]
     try:
-        plan = plan_adjustment(balance, data.observed_balance, data.note)
+        # Interest needs no explanation, so it is planned as an adjustment with a fixed note.
+        plan = plan_adjustment(balance, data.observed_balance, data.note if not data.as_interest else INTEREST_NOTE)
     except DomainError:
         raise ApiError(422, "adjustment_note_required", "Escribe por qué ajustas el saldo.") from None
 
     if plan is None:
         return AdjustmentResult(transaction=None, balance=balance)
+
+    if data.as_interest:
+        if plan.type is not TransactionType.ADJUSTMENT_IN:
+            raise ApiError(
+                422,
+                "interest_must_be_positive",
+                "Solo se pueden registrar como intereses los saldos mayores al actual.",
+            )
+        row = models.Transaction(
+            id=uuid.uuid4(),
+            account_id=account.id,
+            type=TransactionType.INCOME.value,
+            amount=plan.amount,
+            currency=account.currency,
+            date=data.date or datetime.now(UTC),
+            merchant=INTEREST_MERCHANT,
+            note=data.note.strip() or None,
+            category_id=_interest_category(db),
+            source="manual",
+            status=TransactionStatus.CONFIRMED.value,
+        )
+        db.add(row)
+        db.commit()
+        return AdjustmentResult(transaction=TransactionOut.model_validate(row), balance=round_money(data.observed_balance))
 
     row = models.Transaction(
         id=uuid.uuid4(),
@@ -247,6 +272,40 @@ def create_adjustment(db: Session, account_id: uuid.UUID, data: AdjustmentCreate
     db.add(row)
     db.commit()
     return AdjustmentResult(transaction=TransactionOut.model_validate(row), balance=round_money(data.observed_balance))
+
+
+INTEREST_NOTE = "Intereses"
+INTEREST_MERCHANT = "Intereses"
+INTEREST_CATEGORY = "Rendimientos"
+
+
+def _interest_category(db: Session) -> uuid.UUID:
+    """The income category interest goes to: the existing one for returns, created if it is missing."""
+    found = db.scalars(
+        select(models.Category).where(
+            models.Category.type == "income", func.lower(models.Category.name) == INTEREST_CATEGORY.lower()
+        )
+    ).first()
+    if found is not None:
+        return found.id
+    created = models.Category(id=uuid.uuid4(), name=INTEREST_CATEGORY, type="income")
+    db.add(created)
+    db.flush()
+    return created.id
+
+
+def mark_as_interest(db: Session, transaction_id: uuid.UUID) -> models.Transaction:
+    """Turn a positive balance adjustment into interest: an income with its category. The amount does not change."""
+    row = get_transaction(db, transaction_id)
+    if row.type != TransactionType.ADJUSTMENT_IN.value or row.status != TransactionStatus.CONFIRMED.value:
+        raise ApiError(
+            409, "not_a_positive_adjustment", "Solo un ajuste de saldo positivo se puede marcar como intereses."
+        )
+    row.type = TransactionType.INCOME.value
+    row.category_id = _interest_category(db)
+    row.merchant = row.merchant or INTEREST_MERCHANT
+    db.commit()
+    return row
 
 
 def _check_consistent_to_confirm(db: Session, row: models.Transaction) -> None:

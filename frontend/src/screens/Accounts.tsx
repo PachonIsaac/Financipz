@@ -27,7 +27,7 @@ import {
   type AccountFormValues,
 } from '../features/accounts/form'
 import { ACCOUNT_TYPE_LABELS, IDENTIFIER_TYPE_LABELS, SELECTABLE_ACCOUNT_TYPES } from '../features/labels'
-import { parseAmountInput } from '../lib/money'
+import { fromCents, parseAmountInput, toCents } from '../lib/money'
 
 type Panel =
   | { kind: 'list' }
@@ -238,21 +238,30 @@ function AdjustForm({ account, onDone }: { account: Account; onDone: () => void 
   const adjust = useAdjustAccount()
   const [balance, setBalance] = useState('')
   const [note, setNote] = useState('')
+  const [asInterest, setAsInterest] = useState(false)
   const [errors, setErrors] = useState<{ balance?: string; note?: string }>({})
+
+  // What the typed balance changes, worked out as the person types, so nothing has to be subtracted by hand.
+  const observed = parseAmountInput(balance, { allowNegative: true })
+  const difference = observed === null ? null : toCents(observed) - toCents(account.balance)
+  const positive = difference !== null && difference > 0n
+  const interest = asInterest && positive
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
-    const parsed = parseAmountInput(balance, { allowNegative: true })
     const found: typeof errors = {}
-    if (parsed === null) found.balance = 'Escribe el saldo que ves en la cuenta.'
-    if (!note.trim()) found.note = 'Escribe el motivo del ajuste.'
+    if (observed === null) found.balance = 'Escribe el saldo que ves en la cuenta.'
+    if (!interest && !note.trim()) found.note = 'Escribe el motivo del ajuste.'
     setErrors(found)
-    if (parsed === null || found.note) return
+    if (observed === null || found.note) return
+    const body = interest
+      ? { observed_balance: observed, as_interest: true, ...(note.trim() ? { note: note.trim() } : {}) }
+      : { observed_balance: observed, note: note.trim() }
     adjust.mutate(
-      { id: account.id, body: { observed_balance: parsed, note: note.trim() } },
+      { id: account.id, body },
       {
         onSuccess: (result) => {
-          toast.show(result.transaction ? 'Saldo ajustado' : 'El saldo ya coincidía')
+          toast.show(!result.transaction ? 'El saldo ya coincidía' : interest ? 'Intereses registrados' : 'Saldo ajustado')
           onDone()
         },
       },
@@ -261,9 +270,9 @@ function AdjustForm({ account, onDone }: { account: Account; onDone: () => void 
 
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-      <p className="text-sm text-slate-600 dark:text-slate-400">
+      <p className="text-sm text-slate-400">
         Saldo actual: <Amount value={account.balance} currency={account.currency} exact />. Escribe el saldo real y
-        se registrará un movimiento de ajuste por la diferencia.
+        se registrará un movimiento por la diferencia.
       </p>
       <TextField
         label={`Saldo real (${account.currency})`}
@@ -272,10 +281,31 @@ function AdjustForm({ account, onDone }: { account: Account; onDone: () => void 
         onChange={(e) => setBalance(e.target.value)}
         error={errors.balance}
       />
-      <TextField label="Motivo" value={note} onChange={(e) => setNote(e.target.value)} error={errors.note} />
+      {difference !== null && difference !== 0n ? (
+        <p role="status" className="rounded-2xl bg-slate-900 p-3 text-sm text-slate-300">
+          Diferencia:{' '}
+          <Amount value={fromCents(difference)} currency={account.currency} exact showPlus />
+        </p>
+      ) : null}
+      {positive ? (
+        <Card>
+          <Switch
+            checked={asInterest}
+            onChange={setAsInterest}
+            label="Registrar como intereses"
+            description="Se guarda como un ingreso con la categoría Rendimientos, y suma a los ingresos del mes en vez de ser un ajuste."
+          />
+        </Card>
+      ) : null}
+      <TextField
+        label={interest ? 'Nota (opcional)' : 'Motivo'}
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        error={errors.note}
+      />
       <FormError error={adjust.error} />
       <Button type="submit" disabled={adjust.isPending}>
-        {adjust.isPending ? 'Guardando…' : 'Ajustar saldo'}
+        {adjust.isPending ? 'Guardando…' : interest ? 'Registrar intereses' : 'Ajustar saldo'}
       </Button>
     </form>
   )
