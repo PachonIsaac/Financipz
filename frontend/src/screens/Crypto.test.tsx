@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Portfolio, Trade } from '../api/types'
@@ -34,16 +34,41 @@ function trade(id: string, side: 'buy' | 'sell'): Trade {
   }
 }
 
+const HISTORY = [
+  {
+    date: '2026-10-26',
+    total_usd: '1700.00',
+    assets: [
+      { asset: 'BTC', quantity: '0.019000000000', value_usd: '1560.00' },
+      { asset: 'USDT', quantity: '140.000000000000', value_usd: '140.00' },
+      { asset: 'OLD', quantity: '5.000000000000', value_usd: '0.00' },
+    ],
+  },
+  {
+    date: '2026-10-27',
+    total_usd: '1781.98',
+    assets: [
+      { asset: 'BTC', quantity: '0.020000000000', value_usd: '1645.00' },
+      { asset: 'USDT', quantity: '136.980000000000', value_usd: '136.98' },
+    ],
+  },
+  {
+    date: '2026-10-28',
+    total_usd: '1798.64',
+    assets: [
+      { asset: 'BTC', quantity: '0.020391590000', value_usd: '1662.54' },
+      { asset: 'USDT', quantity: '136.100000000000', value_usd: '136.10' },
+    ],
+  },
+]
+
 function setup(overrides = {}) {
   const listTrades = vi.fn(async (cursor?: string) =>
     cursor ? { items: [trade('t2', 'sell')], next_cursor: null } : { items: [trade('t1', 'buy')], next_cursor: 'next' },
   )
   const api = fakeApi({
     getPortfolio: vi.fn(async () => portfolio),
-    getCryptoHistory: vi.fn(async () => [
-      { date: '2026-10-27', total_usd: '1781.98' },
-      { date: '2026-10-28', total_usd: '1798.64' },
-    ]),
+    getCryptoHistory: vi.fn(async () => HISTORY),
     listTrades: listTrades as never,
     ...overrides,
   })
@@ -58,7 +83,7 @@ describe('crypto screen', () => {
     expect(await screen.findByLabelText('Valor del portafolio')).toHaveTextContent('US$ 1.798,64')
     expect(screen.getByText(/≈/)).toHaveTextContent('$ 5.662.155')
     expect(screen.getByText(/Instantánea del 28\/10\/2026 · TRM \$ 3\.148/)).toBeInTheDocument()
-    expect(screen.getByText('0,02039159 BTC')).toBeInTheDocument()
+    expect(screen.getAllByText('0,02039159 BTC').length).toBeGreaterThan(0)
     expect(screen.getByText('136,09947145 USDT')).toBeInTheDocument()
     expect(screen.getByText('Sin precio')).toBeInTheDocument()
     expect(screen.getByText('1 activo no tiene precio y no está sumado en el total.')).toBeInTheDocument()
@@ -67,8 +92,57 @@ describe('crypto screen', () => {
   it('draws the history with a table for those who cannot see the chart', async () => {
     setup()
 
-    expect(await screen.findByRole('img', { name: 'Valor del portafolio en dólares por día' })).toBeInTheDocument()
+    expect(await screen.findByRole('slider', { name: 'Valor del portafolio en dólares por día' })).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Valor del portafolio en dólares por día' })).toBeInTheDocument()
+  })
+
+  it('starts on the last day, with its exact balances and nothing to compare', async () => {
+    setup()
+
+    const chart = await screen.findByRole('slider', { name: 'Valor del portafolio en dólares por día' })
+
+    expect(chart).toHaveAttribute('aria-valuenow', '2')
+    const detail = screen.getByText('Último día sincronizado').parentElement!
+    expect(detail).toHaveTextContent('28/10/2026')
+    expect(detail).toHaveTextContent('US$ 1.798,64')
+    expect(detail).toHaveTextContent('0,02039159 BTC')
+    expect(screen.queryByText(/Hasta hoy/)).not.toBeInTheDocument()
+  })
+
+  it('shows another day with its balances and how they changed until today, using the arrow keys', async () => {
+    const user = userEvent.setup()
+    setup()
+    const chart = await screen.findByRole('slider', { name: 'Valor del portafolio en dólares por día' })
+
+    chart.focus()
+    await user.keyboard('{ArrowLeft}{ArrowLeft}')
+
+    expect(chart).toHaveAttribute('aria-valuenow', '0')
+    const detail = screen.getByText(/Hasta hoy/).parentElement!
+    expect(detail).toHaveTextContent('26/10/2026')
+    expect(detail).toHaveTextContent('US$ 1.700,00')
+    // 1.798,64 - 1.700,00 = +98,64, which is 5,8 % of that day.
+    expect(screen.getByText(/Hasta hoy/)).toHaveTextContent('+US$ 98,64 (+5,8 %)')
+    expect(detail).toHaveTextContent('0,019 BTC')
+    expect(detail).toHaveTextContent('+0,00139159 BTC · +US$ 102,54')
+    expect(detail).toHaveTextContent('−3,9 USDT · −US$ 3,90')
+    expect(detail).toHaveTextContent('ya no lo tienes')
+  })
+
+  it('chooses the day nearest to where the chart is touched', async () => {
+    setup()
+    const chart = await screen.findByRole('slider', { name: 'Valor del portafolio en dólares por día' })
+    vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 330, top: 0, right: 330, bottom: 100, height: 100, x: 0, y: 0, toJSON: () => ({}) })
+
+    fireEvent.pointerDown(chart, { clientX: 6, pointerId: 1, pointerType: 'touch' })
+    expect(chart).toHaveAttribute('aria-valuenow', '0')
+
+    fireEvent.pointerMove(chart, { clientX: 170, pointerId: 1, pointerType: 'mouse' })
+    expect(chart).toHaveAttribute('aria-valuenow', '1')
+    expect(screen.getByText(/Hasta hoy/).parentElement).toHaveTextContent('27/10/2026')
+
+    fireEvent.pointerMove(chart, { clientX: 400, pointerId: 1, pointerType: 'mouse' })
+    expect(chart).toHaveAttribute('aria-valuenow', '2')
   })
 
   it('shows the last five trades and all of them after asking for more', async () => {

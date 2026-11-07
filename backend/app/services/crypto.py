@@ -14,7 +14,7 @@ from app.db import models
 from app.domain.crypto import summarize_values
 from app.domain.entities import LOCAL_TIMEZONE, Currency
 from app.domain.fx import round_money
-from app.schemas.crypto import HistoryPoint, PortfolioAsset, PortfolioOut
+from app.schemas.crypto import HistoryAsset, HistoryPoint, PortfolioAsset, PortfolioOut
 from app.schemas.reports import CryptoOut, RateUsed
 from app.services.fx_rates import rate_on_or_before
 
@@ -80,17 +80,28 @@ def wealth_block(db: Session) -> CryptoOut:
 
 
 def history(db: Session, start: date | None, end: date | None) -> list[HistoryPoint]:
-    """Daily total in dollars, oldest first. A day without a sync has no point."""
-    query = (
-        select(models.CryptoBalance.date, func.coalesce(func.sum(models.CryptoBalance.value_usd), 0))
-        .group_by(models.CryptoBalance.date)
-        .order_by(models.CryptoBalance.date)
-    )
+    """Daily total in dollars and what was held, oldest first. A day without a sync has no point."""
+    query = select(models.CryptoBalance).order_by(models.CryptoBalance.date, models.CryptoBalance.asset)
     if start is not None:
         query = query.where(models.CryptoBalance.date >= start)
     if end is not None:
         query = query.where(models.CryptoBalance.date <= end)
-    return [HistoryPoint(date=day, total_usd=total) for day, total in db.execute(query)]
+
+    days: dict[date, list[models.CryptoBalance]] = {}
+    for row in db.scalars(query):
+        days.setdefault(row.date, []).append(row)
+    points = []
+    for day, rows in days.items():
+        # An asset without a price has no value to sort by, so it goes last.
+        ordered = sorted(rows, key=lambda row: (row.value_usd is None, -(row.value_usd or 0), row.asset))
+        points.append(
+            HistoryPoint(
+                date=day,
+                total_usd=sum((row.value_usd for row in rows if row.value_usd is not None), Decimal(0)),
+                assets=[HistoryAsset(asset=row.asset, quantity=row.quantity, value_usd=row.value_usd) for row in ordered],
+            )
+        )
+    return points
 
 
 def list_trades(

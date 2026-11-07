@@ -30,9 +30,18 @@ class PortfolioOut(Output):
     assets: list[PortfolioAsset]
 
 
+class HistoryAsset(Output):
+    asset: str
+    quantity: Decimal
+    # Null when the asset could not be priced that day.
+    value_usd: Cents | None
+
+
 class HistoryPoint(Output):
     date: dt.date
     total_usd: Cents
+    # What was held that day, biggest value first.
+    assets: list[HistoryAsset]
 
 
 class TradeOut(Output):

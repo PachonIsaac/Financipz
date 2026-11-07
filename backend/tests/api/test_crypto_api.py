@@ -91,18 +91,35 @@ def test_history_has_one_total_per_synced_day_and_skips_the_rest(client, db, exc
     everything = client.get(f"{API}/crypto/history").json()
     ranged = client.get(f"{API}/crypto/history", params={"from": "2026-10-21", "to": "2026-10-26"}).json()
 
-    assert everything == [
-        {"date": "2026-10-20", "total_usd": "105.50"},
-        {"date": "2026-10-22", "total_usd": "120.00"},
-        {"date": "2026-10-27", "total_usd": "130.00"},
+    assert [(point["date"], point["total_usd"]) for point in everything] == [
+        ("2026-10-20", "105.50"),
+        ("2026-10-22", "120.00"),
+        ("2026-10-27", "130.00"),
     ]
-    assert ranged == [{"date": "2026-10-22", "total_usd": "120.00"}]
+    assert [(point["date"], point["total_usd"]) for point in ranged] == [("2026-10-22", "120.00")]
+
+
+def test_history_says_what_was_held_each_day_biggest_value_first_and_unpriced_last(client, db, exchange_account):
+    snapshot(db, exchange_account, date(2026, 10, 20), {"USDT": ("5.5", "5.50"), "BTC": ("0.0012", "100.00")})
+    snapshot(db, exchange_account, date(2026, 10, 22), {"OBSCURE": ("3", None), "BTC": ("0.001", "90.00")})
+
+    days = client.get(f"{API}/crypto/history").json()
+
+    assert [(item["asset"], item["quantity"], item["value_usd"]) for item in days[0]["assets"]] == [
+        ("BTC", "0.001200000000", "100.00"),
+        ("USDT", "5.500000000000", "5.50"),
+    ]
+    assert [(item["asset"], item["value_usd"]) for item in days[1]["assets"]] == [("BTC", "90.00"), ("OBSCURE", None)]
+    assert days[1]["total_usd"] == "90.00"
 
 
 def test_history_of_a_day_with_only_unpriced_assets_is_zero(client, db, exchange_account):
     snapshot(db, exchange_account, date(2026, 10, 22), {"OBSCURE": ("1", None)})
 
-    assert client.get(f"{API}/crypto/history").json() == [{"date": "2026-10-22", "total_usd": "0.00"}]
+    [point] = client.get(f"{API}/crypto/history").json()
+
+    assert (point["date"], point["total_usd"]) == ("2026-10-22", "0.00")
+    assert [(item["asset"], item["value_usd"]) for item in point["assets"]] == [("OBSCURE", None)]
 
 
 def test_history_rejects_an_inverted_range(client):

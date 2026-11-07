@@ -257,9 +257,18 @@ export interface Portfolio {
   assets: PortfolioAsset[]
 }
 
+export interface HistoryAsset {
+  asset: string
+  quantity: string
+  /** Null when the asset could not be priced that day. */
+  value_usd: string | null
+}
+
 export interface HistoryPoint {
   date: string
   total_usd: string
+  /** What was held that day, biggest value first. */
+  assets: HistoryAsset[]
 }
 
 export interface Trade {

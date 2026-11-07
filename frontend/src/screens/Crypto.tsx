@@ -2,13 +2,14 @@ import { Link2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCryptoHistory, usePortfolio, useTrades } from '../api/hooks'
-import type { Trade } from '../api/types'
+import type { HistoryPoint, Trade } from '../api/types'
 import { Amount } from '../components/Amount'
 import { LineChart } from '../components/LineChart'
 import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, ListSkeleton } from '../components/states'
 import { Button, Card } from '../components/ui'
 import { TONES } from '../features/appearance'
+import { compareDays, signOf, type AssetChange } from '../features/crypto/compare'
 import { formatDate, formatDateTime, todayLocal } from '../lib/dates'
 import { formatMoney, formatQuantity, formatRate } from '../lib/money'
 
@@ -29,6 +30,102 @@ function AssetChip({ asset }: { asset: string }) {
     >
       {asset.slice(0, 4)}
     </span>
+  )
+}
+
+/** A change with its sign written out and a color, so it never relies on the color alone. */
+function Change({ value, text }: { value: string; text: string }) {
+  const direction = signOf(value)
+  const sign = direction > 0 ? '+' : direction < 0 ? '−' : ''
+  const tone = direction > 0 ? 'text-income' : direction < 0 ? 'text-rose-400' : 'text-slate-400'
+  return (
+    <span className={`tabular ${tone}`}>
+      {sign}
+      {text}
+    </span>
+  )
+}
+
+function unsigned(value: string): string {
+  return value.startsWith('-') ? value.slice(1) : value
+}
+
+function AssetRow({ day, change, compared }: { day: HistoryPoint; change: AssetChange | undefined; compared: boolean }) {
+  const held = change ? { asset: change.asset, quantity: change.then } : null
+  const item = held ? day.assets.find((entry) => entry.asset === held.asset) : undefined
+  return (
+    <li className="flex items-start justify-between gap-3 border-t border-slate-800 py-2 first:border-t-0">
+      <div className="min-w-0">
+        <p className="text-sm">{change?.asset}</p>
+        <p className="text-[13px] text-slate-400">
+          {item ? `${formatQuantity(item.quantity)} ${item.asset}` : 'No lo tenías ese día'}
+        </p>
+      </div>
+      <div className="text-right text-sm">
+        <p className="tabular font-medium">{item?.value_usd ? formatMoney(item.value_usd, 'USD') : item ? 'Sin precio' : '—'}</p>
+        {compared && change ? (
+          <p className="text-[13px]">
+            {change.status === 'gone' ? (
+              <span className="text-slate-400">ya no lo tienes</span>
+            ) : change.status === 'new' ? (
+              <span className="text-slate-400">nuevo desde entonces</span>
+            ) : change.status === 'unpriced' ? (
+              <span className="text-slate-400">sin precio para comparar</span>
+            ) : change.status === 'same' ? (
+              <span className="text-slate-400">sin cambio</span>
+            ) : (
+              <>
+                <Change value={change.quantityChange} text={`${formatQuantity(unsigned(change.quantityChange))} ${change.asset}`} />
+                {change.valueChange ? (
+                  <>
+                    {' · '}
+                    <Change value={change.valueChange} text={formatMoney(unsigned(change.valueChange), 'USD')} />
+                  </>
+                ) : null}
+              </>
+            )}
+          </p>
+        ) : null}
+      </div>
+    </li>
+  )
+}
+
+/** What the portfolio held on the chosen day, and how it changed from then until the last synced day. */
+function DayDetail({ day, today }: { day: HistoryPoint; today: HistoryPoint }) {
+  const compared = day.date !== today.date
+  const comparison = compared ? compareDays(day, today) : null
+  const byAsset = new Map(comparison?.assets.map((item) => [item.asset, item]))
+  // The assets of that day, then the ones held only now, which that day did not have.
+  const rows = comparison
+    ? [...day.assets.map((item) => byAsset.get(item.asset)), ...comparison.assets.filter((item) => item.status === 'new')]
+    : day.assets.map((item): AssetChange => ({ asset: item.asset, status: 'same', then: item.quantity, now: item.quantity, quantityChange: '0', valueChange: null }))
+
+  return (
+    <div aria-live="polite" className="mt-3 rounded-2xl bg-slate-950 p-3">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="text-sm font-medium">{formatDate(day.date)}</p>
+        <p className="tabular text-base font-semibold">{formatMoney(day.total_usd, 'USD')}</p>
+      </div>
+      {comparison ? (
+        <p className="mt-0.5 text-right text-[13px] text-slate-400">
+          Hasta hoy: <Change value={comparison.totalChange} text={formatMoney(unsigned(comparison.totalChange), 'USD')} />
+          {comparison.percent ? (
+            <>
+              {' '}
+              (<Change value={comparison.totalChange} text={`${unsigned(comparison.percent).replace('.', ',')} %`} />)
+            </>
+          ) : null}
+        </p>
+      ) : (
+        <p className="mt-0.5 text-right text-[13px] text-slate-400">Último día sincronizado</p>
+      )}
+      <ul className="mt-2">
+        {rows.map((change) =>
+          change ? <AssetRow key={change.asset} day={day} change={change} compared={compared} /> : null,
+        )}
+      </ul>
+    </div>
   )
 }
 
@@ -66,7 +163,11 @@ export function CryptoScreen() {
   const tradeRows = trades.data?.pages.flatMap((page) => page.items) ?? []
   const shownTrades = showAllTrades ? tradeRows : tradeRows.slice(0, RECENT_TRADES)
   const canExpand = hasNextPage || tradeRows.length > RECENT_TRADES
-  const points = (history.data ?? []).map((point) => ({ day: point.date, value: point.total_usd }))
+  const days = history.data ?? []
+  const points = days.map((point) => ({ day: point.date, value: point.total_usd }))
+  // Until a day is touched, the last one is shown.
+  const [picked, setPicked] = useState<number | null>(null)
+  const selected = Math.min(picked ?? days.length - 1, days.length - 1)
 
   return (
     <>
@@ -125,9 +226,15 @@ export function CryptoScreen() {
                   <span className="text-[13px] text-slate-400">en dólares</span>
                 </div>
                 <div className="mt-2.5">
-                  <LineChart points={points} description="Valor del portafolio en dólares por día" />
+                  <LineChart
+                    points={points}
+                    description="Valor del portafolio en dólares por día"
+                    selected={selected}
+                    onSelect={setPicked}
+                  />
                 </div>
-                <p className="mt-1.5 text-xs text-slate-500">Los días sin sincronizar no aparecen en la línea.</p>
+                {days[selected] && days[days.length - 1] ? <DayDetail day={days[selected]} today={days[days.length - 1]!} /> : null}
+                <p className="mt-1.5 text-xs text-slate-500">Toca o arrastra sobre la gráfica para ver un día. Los días sin sincronizar no aparecen.</p>
               </Card>
             ) : null}
 
