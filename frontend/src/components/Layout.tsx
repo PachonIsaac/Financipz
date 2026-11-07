@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { ChevronLeft, Ellipsis, House, Inbox, List, type LucideIcon, Plus } from 'lucide-react'
 import { Link, NavLink, Outlet } from 'react-router-dom'
 import { useTransactionList } from '../api/hooks'
+import { RouteErrorBoundary } from './ErrorBoundary'
 import { OfflineBanner } from './states'
 
 const TAB_BASE = 'relative flex h-14 flex-1 items-center justify-center rounded-[28px]'
@@ -38,6 +39,17 @@ function Tab({
   )
 }
 
+/** What shows while a screen is still being downloaded: the shape of a page, inside the layout. */
+function PageSkeleton() {
+  return (
+    <div role="status" aria-label="Cargando" className="flex flex-col gap-4">
+      <div className="h-10 w-40 animate-pulse rounded-xl bg-slate-900" />
+      <div className="h-32 animate-pulse rounded-3xl bg-slate-900" />
+      <div className="h-48 animate-pulse rounded-3xl bg-slate-900" />
+    </div>
+  )
+}
+
 export function AppLayout() {
   const pending = useTransactionList({ status: 'pending_review' })
   const first = pending.data?.pages[0]
@@ -46,7 +58,12 @@ export function AppLayout() {
     <div className="mx-auto flex min-h-dvh max-w-xl flex-col">
       <OfflineBanner />
       <main className="flex-1 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-36">
-        <Outlet />
+        {/* Both live inside the layout, so changing screen only swaps this part and the menu below stays put. */}
+        <RouteErrorBoundary>
+          <Suspense fallback={<PageSkeleton />}>
+            <Outlet />
+          </Suspense>
+        </RouteErrorBoundary>
       </main>
       <nav
         aria-label="Navegación principal"

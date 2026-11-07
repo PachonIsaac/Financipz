@@ -26,6 +26,19 @@ const MovementsScreen = lazy(() => import('./screens/Movements').then((m) => ({ 
 const NewTransactionScreen = lazy(() => import('./screens/NewTransaction').then((m) => ({ default: m.NewTransactionScreen })))
 const ReviewScreen = lazy(() => import('./screens/Review').then((m) => ({ default: m.ReviewScreen })))
 
+/** Downloads the screens in the background once the person is in, so the first visit to each one does not wait. */
+export function preloadScreens(): void {
+  const load = () => {
+    void import('./screens/Movements')
+    void import('./screens/Review')
+    void import('./screens/More')
+    void import('./screens/Accounts')
+    void import('./screens/Crypto')
+  }
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(load)
+  else window.setTimeout(load, 1500)
+}
+
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -40,10 +53,18 @@ export function createQueryClient(): QueryClient {
 /** Routes for a signed-in user. */
 export function AppRoutes() {
   return (
-    <RouteErrorBoundary>
-    <Suspense fallback={<div role="status" aria-label="Cargando" className="min-h-dvh" />}>
     <Routes>
-      <Route path="/new" element={<NewTransactionScreen />} />
+      <Route
+        path="/new"
+        element={
+          <RouteErrorBoundary>
+            <Suspense fallback={<div role="status" aria-label="Cargando" className="min-h-dvh" />}>
+              <NewTransactionScreen />
+            </Suspense>
+          </RouteErrorBoundary>
+        }
+      />
+      {/* The layout owns the error boundary and the loading state of its screens (see AppLayout). */}
       <Route element={<AppLayout />}>
         <Route index element={<HomeScreen />} />
         <Route path="movements" element={<MovementsScreen />} />
@@ -59,8 +80,6 @@ export function AppRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
-    </Suspense>
-    </RouteErrorBoundary>
   )
 }
 
@@ -79,6 +98,7 @@ export function App() {
 
   useEffect(() => {
     if (auth.status === 'signedOut') queryClient.clear()
+    if (auth.status === 'signedIn') preloadScreens()
   }, [auth.status, queryClient])
 
   if (auth.status === 'loading') {

@@ -123,3 +123,28 @@ describe('session handling', () => {
     expect(await screen.findByRole('button', { name: 'Iniciar sesión' })).toBeInTheDocument()
   })
 })
+
+describe('moving between screens', () => {
+  it('keeps the same menu on the page while the next screen loads', async () => {
+    const user = userEvent.setup()
+    // The address left by an earlier test would otherwise open another screen.
+    window.history.replaceState(null, '', '/')
+    vi.stubGlobal('fetch', okFetch())
+    renderApp()
+    await screen.findByRole('heading', { name: 'Inicio' })
+    const menu = screen.getByRole('navigation', { name: 'Navegación principal' })
+    const observed: boolean[] = []
+    const watcher = new MutationObserver(() => observed.push(document.body.contains(menu)))
+    watcher.observe(document.body, { childList: true, subtree: true })
+
+    await user.click(screen.getByRole('link', { name: /Más/ }))
+    await screen.findByRole('heading', { name: 'Más' })
+    await user.click(screen.getByRole('link', { name: /Inicio/ }))
+    await screen.findByRole('heading', { name: 'Inicio' })
+    watcher.disconnect()
+
+    // The menu is the very same element all along, and it never left the document.
+    expect(screen.getByRole('navigation', { name: 'Navegación principal' })).toBe(menu)
+    expect(observed.every(Boolean)).toBe(true)
+  })
+})
