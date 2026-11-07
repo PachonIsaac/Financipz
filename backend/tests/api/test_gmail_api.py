@@ -164,7 +164,10 @@ def test_the_first_read_can_go_back_some_days_and_the_next_one_starts_a_day_befo
     app.dependency_overrides[get_settings] = lambda: configured(gmail_first_sync_days=30)
     client.post(f"{API}/integrations/gmail/sync")
     first = connected.queries()[0]
-    assert "from:(alertasynotificaciones@ayn.notificacionesbancolombia.com OR alertasynotificaciones@an.notificacionesbancolombia.com)" in first
+    assert (
+        "from:(alertasynotificaciones@ayn.notificacionesbancolombia.com OR alertasynotificaciones@an.notificacionesbancolombia.com "
+        "OR no-reply@uala.com.co)"
+    ) in first
     month_ago = int((datetime.now(LOCAL_TIMEZONE).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=30)).timestamp())
     assert int(first.rsplit("after:", 1)[1]) == month_ago
 
@@ -344,3 +347,37 @@ def test_both_addresses_of_the_bank_are_read_and_a_wider_window_can_be_asked_for
 def test_the_wider_window_is_bounded(client, connected):
     assert client.post(f"{API}/integrations/gmail/sync", params={"days": 0}).status_code == 422
     assert client.post(f"{API}/integrations/gmail/sync", params={"days": 61}).status_code == 422
+
+
+UALA_NOTICE = (
+    "Transferencia enviada ¡Hola NOMBRE! Te compartimos el detalle de la transferencia realizada. "
+    "Monto $20.000,00 Destinatario PERSONA EJEMPLO Llave destino @alias Cuenta origen ***********6920 "
+    "Costo de la operación Gratis Fecha y hora 04-11-2026 08:22 hs Id. Op. 20261104ABC123456789"
+)
+
+
+def test_a_transfer_notice_of_the_wallet_is_read_with_the_wallets_parser(client, db, connected):
+    wallet = create_account(client, name="Wallet", type="wallet")
+    connected.messages = {
+        "u1": plain_message(UALA_NOTICE, sender="no-reply@uala.com.co"),
+        "u2": plain_message("Hola, mira todo lo que puedes hacer con Ualá", sender="no-reply@uala.com.co"),
+        "b1": plain_message(PURCHASE),
+    }
+    with_digits(client, create_account(client, name="Card", type="credit_card"), "1234")
+
+    body = client.post(f"{API}/integrations/gmail/sync").json()
+
+    assert (body["processed"], body["created"], body["unrecognized"]) == (3, 2, 1)
+    assert "no-reply@uala.com.co" in connected.queries()[0]
+    transfer = db.scalars(select(models.Transaction).where(models.Transaction.type == "transfer")).one()
+    assert (str(transfer.account_id), str(transfer.amount), transfer.target_text) == (wallet["id"], "20000.00", "PERSONA EJEMPLO")
+
+
+def test_the_wallets_parser_is_not_used_for_a_message_that_only_claims_to_come_from_it(client, db, connected):
+    create_account(client, name="Wallet", type="wallet")
+    connected.messages = {"fake": plain_message(UALA_NOTICE, sender="evil@elsewhere.test")}
+    connected.messages["fake"]["payload"]["headers"][0]["value"] = "no-reply@uala.com.co <evil@elsewhere.test>"
+
+    body = client.post(f"{API}/integrations/gmail/sync").json()
+
+    assert (body["created"], body["ignored"]) == (0, 1)

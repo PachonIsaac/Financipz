@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from app.db import models
 from app.domain.entities import LOCAL_TIMEZONE
 from app.parsers.bancolombia import parse_bancolombia
+from app.parsers.uala_email import parse_uala_email
 from app.parsers.uala_sms import parse_uala_sms
 from app.services import ingest
 from app.services.ingest import Outcome
@@ -291,3 +292,66 @@ def test_a_withdrawal_at_a_correspondent_with_two_bank_accounts_assumes_neither(
     create_account(client, name="Checking", type="bank")
 
     assert ingest.ingest(db, bank(CORRESPONDENT_WITHDRAWAL)).transaction.account_id is None
+
+
+def uala_transfer(key="@alias", account="***********6920", operation="20261104ABC123456789", amount="$20.000,00"):
+    return (
+        "Transferencia enviada ¡Hola NOMBRE! Te compartimos el detalle de la transferencia realizada. "
+        f"Monto {amount} Destinatario PERSONA EJEMPLO Llave destino {key} Cuenta origen {account} "
+        f"Costo de la operación Gratis Fecha y hora 04-11-2026 08:22 hs Id. Op. {operation} ¿No reconoces este movimiento?"
+    )
+
+
+def test_a_wallet_transfer_comes_out_of_the_account_that_has_those_digits(client, db):
+    wallet = with_digits(client, create_account(client, name="Wallet", type="wallet"), "6920", "account")
+    create_account(client, name="Other wallet", type="wallet")
+
+    row = ingest.ingest(db, parse_uala_email(uala_transfer())).transaction
+
+    assert (row.type, str(row.account_id), row.status, row.source) == ("transfer", wallet["id"], "pending_review", "gmail")
+    assert (row.target_account_id, row.classification, row.target_text) == (None, None, "PERSONA EJEMPLO")
+    assert row.external_reference == "uala:20261104ABC123456789"
+
+
+def test_a_wallet_transfer_without_registered_digits_comes_out_of_the_only_wallet(client, db):
+    wallet = create_account(client, name="Wallet", type="wallet")
+
+    assert str(ingest.ingest(db, parse_uala_email(uala_transfer())).transaction.account_id) == wallet["id"]
+
+
+def test_a_wallet_transfer_with_two_wallets_and_no_digits_assumes_neither(client, db):
+    create_account(client, name="Wallet", type="wallet")
+    create_account(client, name="Wallet 2", type="wallet")
+
+    assert ingest.ingest(db, parse_uala_email(uala_transfer())).transaction.account_id is None
+
+
+def test_a_wallet_transfer_to_the_key_of_one_of_my_accounts_is_an_own_transfer(client, db):
+    wallet = create_account(client, name="Wallet", type="wallet")
+    bank_account = create_account(client, name="Bank", type="savings", key="@ALIAS")
+
+    row = ingest.ingest(db, parse_uala_email(uala_transfer())).transaction
+
+    assert (str(row.account_id), str(row.target_account_id), row.classification) == (wallet["id"], bank_account["id"], "own_transfer")
+
+
+def test_the_last_digits_of_a_phone_number_never_make_a_transfer_go_to_one_of_my_accounts(client, db):
+    create_account(client, name="Wallet", type="wallet")
+    mine = create_account(client, name="Bank", type="savings")
+    with_digits(client, mine, "4567", "account")
+
+    row = ingest.ingest(db, parse_uala_email(uala_transfer(key="3001234567"))).transaction
+
+    assert row.target_account_id is None and row.classification is None
+
+
+def test_the_same_operation_twice_is_stored_once_even_if_its_text_changed(client, db):
+    create_account(client, name="Wallet", type="wallet")
+    first = ingest.ingest(db, parse_uala_email(uala_transfer()))
+    # The same operation id, with the amount written differently: only the id says it is the same.
+    second = ingest.ingest(db, parse_uala_email(uala_transfer(amount="$20.000,00 ")))
+    third = ingest.ingest(db, parse_uala_email(uala_transfer(operation="20261104ZZZ999999999")))
+
+    assert (first.outcome, second.outcome, third.outcome) == (Outcome.CREATED, Outcome.DUPLICATE, Outcome.DUPLICATE)
+    assert second.transaction.id == first.transaction.id
+    assert len(rows(db)) == 1

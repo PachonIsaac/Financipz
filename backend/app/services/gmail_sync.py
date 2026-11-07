@@ -22,6 +22,7 @@ from app.domain.entities import LOCAL_TIMEZONE
 from app.integrations import gmail
 from app.integrations.gmail import GmailError
 from app.parsers.bancolombia import parse_bancolombia
+from app.parsers.uala_email import parse_uala_email
 from app.services import ingest, integrations
 from app.services.integrations import Notice
 
@@ -147,6 +148,14 @@ def _query(settings: Settings, since: datetime) -> str:
     return f"from:({senders}) after:{int(since.timestamp())}"
 
 
+# Senders whose messages are read with the wallet's parser; every other configured sender is the bank's.
+WALLET_SENDERS = frozenset({"no-reply@uala.com.co"})
+
+
+def _parser_for(sender: str):
+    return parse_uala_email if parseaddr(sender)[1].lower() in WALLET_SENDERS else parse_bancolombia
+
+
 def _from_a_known_sender(settings: Settings, sender: str) -> bool:
     """The address in the From header, not the name beside it, which anyone can write."""
     address = parseaddr(sender)[1].lower()
@@ -204,7 +213,7 @@ def _sync(db: Session, settings: Settings, days: int | None) -> GmailSyncResult:
             for message_id in unread[:MAX_FETCHED_PER_SYNC]:
                 message = client.get_message(message_id)
                 if _from_a_known_sender(settings, message.sender):
-                    outcome = ingest.ingest(db, parse_bancolombia(message.text)).outcome
+                    outcome = ingest.ingest(db, _parser_for(message.sender)(message.text)).outcome
                 else:
                     # Gmail's search also matches the display name: a message that only claims to be the bank is not read.
                     outcome = ingest.Outcome.IGNORED

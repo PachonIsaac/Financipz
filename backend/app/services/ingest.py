@@ -68,6 +68,12 @@ def ingest(db: Session, parsed: ParsedNotification | None) -> IngestResult:
         return IngestResult(Outcome.UNRECOGNIZED)
 
     ambiguous = parsed.occurred_at is None
+    reference = _reference(parsed)
+    if reference is not None:
+        # The issuer's own id for the operation is the surest way to know it was already stored.
+        known = db.scalars(select(models.Transaction).where(models.Transaction.external_reference == reference).limit(1)).first()
+        if known is not None:
+            return IngestResult(Outcome.DUPLICATE, known)
     existing = _by_hash(db, digest)
     if existing is not None:
         return IngestResult(Outcome.DUPLICATE, existing, possible_duplicate=ambiguous)
@@ -85,6 +91,10 @@ def ingest(db: Session, parsed: ParsedNotification | None) -> IngestResult:
         return IngestResult(Outcome.DUPLICATE, existing, possible_duplicate=ambiguous)
     db.commit()
     return IngestResult(Outcome.CREATED, row)
+
+
+def _reference(parsed: ParsedNotification) -> str | None:
+    return f"{parsed.issuer}:{parsed.operation_id}" if parsed.issuer and parsed.operation_id else None
 
 
 def _by_hash(db: Session, digest: str) -> models.Transaction | None:
@@ -126,7 +136,12 @@ def _build(db: Session, parsed: ParsedNotification, digest: str, moment: datetim
         transaction_type = TransactionType.TRANSFER
     elif kind is NotificationKind.TRANSFER_OUT:
         account = _by_digits(db, parsed.last_digits, currency)
-        target = _own_destination(db, parsed.target_key or parsed.target_text, currency)
+        if account is None and parsed.issuer == "uala":
+            # The end of the wallet's account number may not be registered: it came out of the only wallet, if there is one.
+            account = _only_account(db, _WALLET, currency)
+        # A wallet transfer may go to a phone number, whose last digits mean nothing about the person's accounts.
+        destination = parsed.target_key if parsed.issuer == "uala" else (parsed.target_key or parsed.target_text)
+        target = _own_destination(db, destination, currency)
         transaction_type = TransactionType.TRANSFER
     elif kind is NotificationKind.PAYROLL:
         account = _only_account(db, _SAVINGS, currency)
@@ -167,6 +182,7 @@ def _build(db: Session, parsed: ParsedNotification, digest: str, moment: datetim
         source=parsed.source.value,
         status=TransactionStatus.PENDING_REVIEW.value,
         dedupe_hash=digest,
+        external_reference=_reference(parsed),
     )
 
 

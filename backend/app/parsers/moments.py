@@ -5,7 +5,8 @@ from datetime import date, datetime, time
 
 from app.domain.entities import LOCAL_TIMEZONE
 
-_DATE = re.compile(r"(?P<a>\d{1,4})/(?P<b>\d{1,2})/(?P<c>\d{1,4})")
+# The same separator twice: dd/mm/yyyy, dd-mm-yyyy or yyyy/mm/dd.
+_DATE = re.compile(r"(?P<a>\d{1,4})(?P<sep>[/-])(?P<b>\d{1,2})(?P=sep)(?P<c>\d{1,4})")
 _TIME = re.compile(
     r"(?P<hour>\d{1,2}):(?P<minute>\d{2})(?::(?P<second>\d{2}))?(?:\s?(?P<meridiem>[ap])\.?\s?m\b\.?)?",
     re.IGNORECASE,
@@ -18,7 +19,7 @@ _WINDOW = 45
 def find_moment(fragment: str) -> tuple[date | None, datetime | None]:
     """Find a date and an optional time at the start of `fragment`.
 
-    Dates may be `dd/mm/yyyy`, `dd/mm/yy` or `yyyy/mm/dd`. The time may come
+    Dates may be `dd/mm/yyyy`, `dd/mm/yy`, `yyyy/mm/dd` or the same with dashes. The time may come
     before or after the date. Returns the calendar day and, when a time of day
     is present, the Colombia-aware datetime. Invalid values yield `(None, None)`.
     """

@@ -37,9 +37,10 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = ""
     app_url: str = "http://localhost:5173/"
-    # Comma-separated addresses the bank's notifications come from.
+    # Comma-separated addresses the notifications come from: the bank's, and the wallet's.
     gmail_senders: str = (
-        "alertasynotificaciones@ayn.notificacionesbancolombia.com,alertasynotificaciones@an.notificacionesbancolombia.com"
+        "alertasynotificaciones@ayn.notificacionesbancolombia.com,alertasynotificaciones@an.notificacionesbancolombia.com,"
+        "no-reply@uala.com.co"
     )
     # How far back the first read goes, in days before today. 0: from the start of today (Colombian time), so
     # connecting never pulls in an old backlog.

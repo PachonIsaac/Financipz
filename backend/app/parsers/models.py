@@ -54,6 +54,10 @@ class ParsedNotification:
     target_text: str | None = None
     # The Bre-b key of the destination (`@alias`), when the text names one.
     target_key: str | None = None
+    # Who sent the notice when more than one issuer is read (`"uala"`); None for the bank.
+    issuer: str | None = None
+    # The id the issuer gave the operation, when it does: a second notice with the same id is a repeat.
+    operation_id: str | None = None
     last_digits: str | None = None
     # Timezone-aware moment. None when the text carries no time of day.
     occurred_at: datetime | None = None
