@@ -315,3 +315,38 @@ class CryptoTrade(Base):
     fee_asset: Mapped[str | None] = mapped_column(Text)
     executed_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     external_id: Mapped[str] = mapped_column(Text, unique=True)
+
+
+class Envelope(Base):
+    """Money set apart inside an account for a payment that is coming. It does not count in the balance."""
+
+    __tablename__ = "envelopes"
+    __table_args__ = (CheckConstraint("target_amount IS NULL OR target_amount > 0", name="target_positive"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID_PK, primary_key=True, server_default=func.gen_random_uuid())
+    account_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("accounts.id"))
+    name: Mapped[str] = mapped_column(Text)
+    target_amount: Mapped[Decimal | None] = mapped_column(MONEY)
+    due_date: Mapped[dt.date | None] = mapped_column(Date)
+    repeats_yearly: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EnvelopeEntry(Base):
+    """A change in what an envelope holds: positive when money is set apart, negative when it is freed."""
+
+    __tablename__ = "envelope_entries"
+    __table_args__ = (
+        CheckConstraint("amount <> 0", name="amount_not_zero"),
+        Index("ix_envelope_entries_envelope_id", "envelope_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID_PK, primary_key=True, server_default=func.gen_random_uuid())
+    envelope_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("envelopes.id", ondelete="CASCADE"))
+    amount: Mapped[Decimal] = mapped_column(MONEY)
+    date: Mapped[dt.date] = mapped_column(Date)
+    note: Mapped[str | None] = mapped_column(Text)
+    # The expense this payment recorded, when the entry freed money to pay for something.
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("transactions.id", ondelete="SET NULL"))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db import models
 from app.domain import entities as domain
 from app.domain.entities import TransactionStatus, TransactionType
+from app.domain.envelopes import effective_reserved
 
 # Income and positive adjustments add to the account that owns the movement. Everything else
 # (expenses, negative adjustments, and the sending side of a transfer) subtracts.
@@ -56,6 +57,23 @@ def account_balances(db: Session, only: Collection[uuid.UUID] | None = None) -> 
         if account_id in balances:
             balances[account_id] += total
     return balances
+
+
+def reserved_by_account(db: Session, balances: dict[uuid.UUID, Decimal]) -> dict[uuid.UUID, Decimal]:
+    """Money set apart in envelopes, per account, given the balances already computed.
+
+    Never more than the positive balance: if the account fell below what is set apart, the rest is not there to keep.
+    """
+    held = db.execute(
+        select(models.Envelope.account_id, func.sum(models.EnvelopeEntry.amount))
+        .join(models.EnvelopeEntry, models.EnvelopeEntry.envelope_id == models.Envelope.id)
+        .group_by(models.Envelope.account_id)
+    )
+    return {
+        account_id: effective_reserved(total, balances.get(account_id, Decimal(0)))
+        for account_id, total in held
+        if account_id in balances
+    }
 
 
 def to_domain_account(row: models.Account) -> domain.Account:

@@ -54,6 +54,8 @@ class WealthAccount(Output):
     include_in_balance: bool
     # In the account's own currency; can be negative.
     balance: Cents
+    # Part of the balance set apart in envelopes: it is left out of the available money.
+    reserved: Cents
     # Null for exchange and system accounts when no rate could value them.
     balance_cop: Cents | None
 

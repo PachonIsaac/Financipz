@@ -59,7 +59,7 @@ def get_transaction(db: Session, transaction_id: uuid.UUID) -> models.Transactio
     return get_or_404(db, models.Transaction, transaction_id, "El movimiento no existe.")
 
 
-def create_transaction(db: Session, data: TransactionCreate) -> models.Transaction:
+def create_transaction(db: Session, data: TransactionCreate, commit: bool = True) -> models.Transaction:
     draft = Draft(
         account_id=data.account_id,
         type=data.type,
@@ -78,13 +78,20 @@ def create_transaction(db: Session, data: TransactionCreate) -> models.Transacti
         id=uuid.uuid4(), source="manual", status=TransactionStatus.CONFIRMED.value, **values
     )
     db.add(row)
-    db.commit()
+    # A caller that has more to save with it commits once, so nothing is left half done.
+    db.commit() if commit else db.flush()
     return row
 
 
 def update_transaction(db: Session, transaction_id: uuid.UUID, data: TransactionUpdate) -> models.Transaction:
     row = get_transaction(db, transaction_id)
     changes = data.changes()
+    if changes.keys() & {"amount", "account_id"} and _linked_to_envelope(db, row.id):
+        raise ApiError(
+            409,
+            "linked_to_envelope",
+            "Este gasto se pagó con una cajita: no se puede cambiar su monto ni su cuenta.",
+        )
     if row.account_id is None and changes.get("account_id") is None:
         # Everything else about it depends on the account, so that is chosen first.
         raise ApiError(409, "account_required", "Elige primero la cuenta del movimiento.")
@@ -131,17 +138,18 @@ def delete_transaction(db: Session, transaction_id: uuid.UUID) -> None:
             "use_discard",
             "Este movimiento viene de una fuente automática. Descártalo en lugar de borrarlo.",
         )
+    _return_to_envelope(db, row.id)
     db.delete(row)
     db.commit()
 
 
-def confirm_transaction(db: Session, transaction_id: uuid.UUID) -> models.Transaction:
+def confirm_transaction(db: Session, transaction_id: uuid.UUID, commit: bool = True) -> models.Transaction:
     row = get_transaction(db, transaction_id)
     if row.status != TransactionStatus.PENDING_REVIEW:
         raise ApiError(409, "not_pending", "Solo se pueden confirmar movimientos pendientes de revisión.")
     _check_consistent_to_confirm(db, row)
     row.status = TransactionStatus.CONFIRMED.value
-    db.commit()
+    db.commit() if commit else db.flush()
     return row
 
 
@@ -149,9 +157,26 @@ def discard_transaction(db: Session, transaction_id: uuid.UUID) -> models.Transa
     row = get_transaction(db, transaction_id)
     if row.status == TransactionStatus.DISCARDED:
         raise ApiError(409, "already_discarded", "El movimiento ya está descartado.")
+    _return_to_envelope(db, row.id)
     row.status = TransactionStatus.DISCARDED.value
     db.commit()
     return row
+
+
+def _linked_to_envelope(db: Session, transaction_id: uuid.UUID) -> bool:
+    return bool(
+        db.scalar(
+            select(func.count())
+            .select_from(models.EnvelopeEntry)
+            .where(models.EnvelopeEntry.transaction_id == transaction_id)
+        )
+    )
+
+
+def _return_to_envelope(db: Session, transaction_id: uuid.UUID) -> None:
+    """An expense that no longer counts gives back what an envelope freed to pay it."""
+    for entry in db.scalars(select(models.EnvelopeEntry).where(models.EnvelopeEntry.transaction_id == transaction_id)):
+        db.delete(entry)
 
 
 @dataclass

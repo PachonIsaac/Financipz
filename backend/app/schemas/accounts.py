@@ -58,6 +58,8 @@ class AccountOut(Output):
     include_in_balance: bool
     # Initial balance plus confirmed movements, in the account's own currency. Can be negative.
     balance: Decimal
+    # Part of the balance set apart in envelopes. It does not count in the balance of the app.
+    reserved: Decimal = Decimal(0)
 
 
 class IdentifierIn(Input):

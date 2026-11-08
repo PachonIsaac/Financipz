@@ -9,7 +9,7 @@ from app.core.errors import ApiError
 from app.db import models
 from app.domain.entities import AccountType
 from app.schemas.accounts import AccountCreate, AccountOut, AccountUpdate, IdentifierIn
-from app.services.balances import account_balances
+from app.services.balances import account_balances, reserved_by_account
 from app.services.common import get_or_404
 
 # Types the user can switch between. Loan, exchange and system accounts behave differently
@@ -23,7 +23,7 @@ SWITCHABLE_TYPES = {
 }
 
 
-def to_out(row: models.Account, balance: Decimal) -> AccountOut:
+def to_out(row: models.Account, balance: Decimal, reserved: Decimal = Decimal(0)) -> AccountOut:
     return AccountOut(
         id=row.id,
         name=row.name,
@@ -35,6 +35,7 @@ def to_out(row: models.Account, balance: Decimal) -> AccountOut:
         archived=row.archived,
         include_in_balance=row.include_in_balance,
         balance=balance,
+        reserved=reserved,
     )
 
 
@@ -48,12 +49,14 @@ def list_accounts(db: Session, archived: bool | None) -> list[AccountOut]:
         query = query.where(models.Account.archived == archived)
     rows = list(db.scalars(query))
     balances = account_balances(db)
-    return [to_out(row, balances[row.id]) for row in rows]
+    reserved = reserved_by_account(db, balances)
+    return [to_out(row, balances[row.id], reserved.get(row.id, Decimal(0))) for row in rows]
 
 
 def get_account_out(db: Session, account_id: uuid.UUID) -> AccountOut:
     row = get_account(db, account_id)
-    return to_out(row, account_balances(db, {row.id})[row.id])
+    balances = account_balances(db, {row.id})
+    return to_out(row, balances[row.id], reserved_by_account(db, balances).get(row.id, Decimal(0)))
 
 
 def create_account(db: Session, data: AccountCreate) -> AccountOut:
@@ -95,7 +98,7 @@ def update_account(db: Session, account_id: uuid.UUID, data: AccountUpdate) -> A
     for name, value in changes.items():
         setattr(row, name, value.value if isinstance(value, AccountType) else value)
     _commit(db)
-    return to_out(row, account_balances(db, {row.id})[row.id])
+    return get_account_out(db, row.id)
 
 
 def list_identifiers(db: Session, account_id: uuid.UUID) -> list[models.AccountIdentifier]:

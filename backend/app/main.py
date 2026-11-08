@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.accounts import router as accounts_router
 from app.api.categories import router as categories_router
 from app.api.crypto import router as crypto_router
+from app.api.envelopes import router as envelopes_router
 from app.api.fx_rates import router as fx_rates_router
 from app.api.gmail import router as gmail_router
 from app.api.health import router as health_router
@@ -71,4 +72,5 @@ app.include_router(fx_rates_router, prefix="/api/v1", dependencies=protected)
 app.include_router(reports_router, prefix="/api/v1", dependencies=protected)
 app.include_router(integrations_router, prefix="/api/v1", dependencies=protected)
 app.include_router(crypto_router, prefix="/api/v1", dependencies=protected)
+app.include_router(envelopes_router, prefix="/api/v1", dependencies=protected)
 app.include_router(refresh_router, prefix="/api/v1", dependencies=protected)

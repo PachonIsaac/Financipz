@@ -13,7 +13,7 @@ from app.domain.periods import local_today
 from app.domain.wealth import compute_wealth
 from app.schemas.reports import LoanOut, RateUsed, WealthAccount, WealthOut
 from app.services import crypto as crypto_service
-from app.services.balances import account_balances, to_domain_account
+from app.services.balances import account_balances, reserved_by_account, to_domain_account
 from app.services.fx_rates import rate_on_or_before
 
 # Held apart from the user's money: they never take part in the valuation.
@@ -34,6 +34,9 @@ def current_wealth(db: Session) -> WealthOut:
     today = local_today()
     rows = list(db.scalars(select(models.Account).order_by(models.Account.name)))
     balances = account_balances(db)
+    reserved = reserved_by_account(db, balances)
+    # Money set apart in envelopes is still in the account, but it is not available to spend.
+    spendable = {account_id: total - reserved.get(account_id, Decimal(0)) for account_id, total in balances.items()}
     rate = rate_on_or_before(db, today)
     fx = FxRates({Currency.USD: {rate.date: rate.value}}) if rate else FxRates()
 
@@ -41,7 +44,7 @@ def current_wealth(db: Session) -> WealthOut:
     # An empty foreign currency account needs no rate to be worth zero.
     valued = [row for row in counted if rate or row.currency == Currency.COP.value or balances[row.id] != 0]
     try:
-        wealth = compute_wealth([to_domain_account(row) for row in valued], balances, fx, today)
+        wealth = compute_wealth([to_domain_account(row) for row in valued], spendable, fx, today)
         values: dict = {row.id: _value_in_cop(fx, balances[row.id], row.currency, today) for row in counted}
     except DomainError:
         raise ApiError(409, "missing_fx_rate", MISSING_RATE) from None
@@ -63,6 +66,7 @@ def current_wealth(db: Session) -> WealthOut:
             archived=row.archived,
             include_in_balance=row.include_in_balance,
             balance=balances[row.id],
+            reserved=reserved.get(row.id, Decimal(0)),
             balance_cop=values[row.id],
         )
         # Archived accounts only show while they still hold money.
