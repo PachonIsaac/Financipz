@@ -47,6 +47,12 @@ export function fakeApi(overrides: Partial<Endpoints> = {}): Endpoints {
     mergeTransaction: unmocked('mergeTransaction'),
     confirmTransaction: unmocked('confirmTransaction'),
     discardTransaction: unmocked('discardTransaction'),
+    listEnvelopes: vi.fn(async () => ({ envelopes: [], reserved_total: '0.00', suggested_total: '0.00' })),
+    createEnvelope: unmocked('createEnvelope'),
+    updateEnvelope: unmocked('updateEnvelope'),
+    deleteEnvelope: unmocked('deleteEnvelope'),
+    envelopeEntry: unmocked('envelopeEntry'),
+    payWithEnvelope: unmocked('payWithEnvelope'),
   }
   return { ...base, ...overrides } as unknown as Endpoints
 }
@@ -84,6 +90,7 @@ export function account(partial: Partial<Account> & { id: string }): Account {
     archived: false,
     include_in_balance: true,
     balance: '0.00',
+    reserved: '0.00',
     ...partial,
   }
 }

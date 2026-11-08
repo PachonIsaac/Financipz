@@ -13,6 +13,9 @@ import type {
   CategoryCreate,
   CategoryType,
   CategoryUpdate,
+  EnvelopeCreate,
+  EnvelopePay,
+  EnvelopeUpdate,
   Identifier,
   TransactionCreate,
   TransactionFilters,
@@ -25,6 +28,7 @@ export const keys = {
   transactions: ['transactions'] as const,
   identifiers: (accountId: string) => ['identifiers', accountId] as const,
   wealth: ['wealth'] as const,
+  envelopes: ['envelopes'] as const,
   crypto: ['crypto'] as const,
   integrations: ['integrations'] as const,
   shortcutToken: ['shortcut-token'] as const,
@@ -38,6 +42,7 @@ function refreshMoney(client: QueryClient): Promise<unknown> {
     client.invalidateQueries({ queryKey: keys.transactions }),
     client.invalidateQueries({ queryKey: ['summary'] }),
     client.invalidateQueries({ queryKey: keys.wealth }),
+    client.invalidateQueries({ queryKey: keys.envelopes }),
   ])
 }
 
@@ -323,4 +328,49 @@ export function useMarkInterest() {
   const api = useApi()
   const client = useQueryClient()
   return useMutation({ mutationFn: (id: string) => api.markInterest(id), onSuccess: () => refreshMoney(client) })
+}
+
+export function useEnvelopes() {
+  const api = useApi()
+  return useQuery({ queryKey: keys.envelopes, queryFn: () => api.listEnvelopes() })
+}
+
+export function useCreateEnvelope() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({ mutationFn: (body: EnvelopeCreate) => api.createEnvelope(body), onSuccess: () => refreshMoney(client) })
+}
+
+export function useUpdateEnvelope() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: EnvelopeUpdate }) => api.updateEnvelope(id, body),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function useDeleteEnvelope() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({ mutationFn: (id: string) => api.deleteEnvelope(id), onSuccess: () => refreshMoney(client) })
+}
+
+export function useEnvelopeEntry() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, kind, amount }: { id: string; kind: 'contribute' | 'release'; amount: string }) =>
+      api.envelopeEntry(id, { kind, amount }),
+    onSuccess: () => refreshMoney(client),
+  })
+}
+
+export function usePayWithEnvelope() {
+  const api = useApi()
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: EnvelopePay }) => api.payWithEnvelope(id, body),
+    onSuccess: () => refreshMoney(client),
+  })
 }

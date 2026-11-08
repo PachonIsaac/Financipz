@@ -9,6 +9,12 @@ import type {
   CategoryCreate,
   CategoryType,
   CategoryUpdate,
+  EnvelopeCreate,
+  EnvelopeList,
+  Envelope,
+  EnvelopePay,
+  EnvelopePayResult,
+  EnvelopeUpdate,
   Identifier,
   BinanceSyncResult,
   GmailSyncResult,
@@ -45,6 +51,16 @@ export function createEndpoints(client: ApiClient) {
     listIdentifiers: (id: string) => request<Identifier[]>(`/accounts/${id}/identifiers`),
     replaceIdentifiers: (id: string, identifiers: Identifier[]) =>
       request<Identifier[]>(`/accounts/${id}/identifiers`, { method: 'PUT', body: { identifiers } }),
+
+    listEnvelopes: () => request<EnvelopeList>('/envelopes'),
+    createEnvelope: (body: EnvelopeCreate) => request<Envelope>('/envelopes', { method: 'POST', body }),
+    updateEnvelope: (id: string, body: EnvelopeUpdate) =>
+      request<Envelope>(`/envelopes/${id}`, { method: 'PATCH', body }),
+    deleteEnvelope: (id: string) => request<void>(`/envelopes/${id}`, { method: 'DELETE' }),
+    envelopeEntry: (id: string, body: { kind: 'contribute' | 'release'; amount: string }) =>
+      request<Envelope>(`/envelopes/${id}/entries`, { method: 'POST', body }),
+    payWithEnvelope: (id: string, body: EnvelopePay) =>
+      request<EnvelopePayResult>(`/envelopes/${id}/pay`, { method: 'POST', body }),
 
     listCategories: (type?: CategoryType) => request<Category[]>('/categories', { query: { type } }),
     createCategory: (body: CategoryCreate) => request<Category>('/categories', { method: 'POST', body }),

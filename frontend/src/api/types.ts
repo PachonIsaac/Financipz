@@ -38,6 +38,8 @@ export interface Account {
   /** False when the balance is left out of the available money, the card debt and the loans. */
   include_in_balance: boolean
   balance: string
+  /** Part of the balance set apart in envelopes: it does not count in the balance of the app. */
+  reserved: string
 }
 
 export interface AccountCreate {
@@ -205,6 +207,7 @@ export interface WealthAccount {
   archived: boolean
   include_in_balance: boolean
   balance: string
+  reserved: string
   balance_cop: string
 }
 
@@ -334,4 +337,58 @@ export interface GmailSyncResult {
   last_synced_at: string | null
   /** True when there were more messages than one read takes: reading again continues. */
   more: boolean
+}
+
+export interface Envelope {
+  id: string
+  account_id: string
+  account_name: string
+  currency: Currency
+  name: string
+  target_amount: string | null
+  due_date: string | null
+  repeats_yearly: boolean
+  balance: string
+  months_left: number | null
+  suggested_monthly: string | null
+  ready: boolean
+  /** How much of what the envelopes set apart the account no longer holds. */
+  shortfall: string
+}
+
+export interface EnvelopeList {
+  envelopes: Envelope[]
+  reserved_total: string
+  suggested_total: string
+}
+
+export interface EnvelopeCreate {
+  account_id: string
+  name: string
+  target_amount?: string | null
+  due_date?: string | null
+  repeats_yearly?: boolean
+}
+
+export interface EnvelopeUpdate {
+  name?: string
+  target_amount?: string | null
+  due_date?: string | null
+  repeats_yearly?: boolean
+}
+
+export interface NewExpense {
+  account_id: string
+  amount: string
+  category_id?: string | null
+  merchant?: string | null
+  note?: string | null
+}
+
+export type EnvelopePay = { transaction_id: string } | { expense: NewExpense }
+
+export interface EnvelopePayResult {
+  envelope: Envelope
+  transaction_id: string
+  freed: string
 }

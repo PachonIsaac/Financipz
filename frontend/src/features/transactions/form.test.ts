@@ -13,6 +13,7 @@ function account(id: string, currency: 'COP' | 'USD' = 'COP'): Account {
     key: null,
     archived: false,
     include_in_balance: true,
+    reserved: '0.00',
     balance: '0.00',
   }
 }

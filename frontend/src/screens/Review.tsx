@@ -4,6 +4,8 @@ import { Link } from 'react-router-dom'
 import {
   useConfirmTransaction,
   useDiscardTransaction,
+  useEnvelopes,
+  usePayWithEnvelope,
   useMatches,
   useMergeTransaction,
   useTransactionList,
@@ -17,6 +19,7 @@ import { useToast } from '../components/Toast'
 import { Amount } from '../components/Amount'
 import { Button, Card, SelectField } from '../components/ui'
 import { formatDateTime } from '../lib/dates'
+import { formatMoney } from '../lib/money'
 import { SOURCE_LABELS, TRANSACTION_TYPE_LABELS } from '../features/labels'
 import { categoryOptions } from '../features/transactions/display'
 import { useLookups } from '../features/lookups'
@@ -223,8 +226,18 @@ function PendingCard({
   onConfirm: (id: string) => void
   onDiscard: (id: string) => void
 }) {
+  const toast = useToast()
   const update = useUpdateTransaction(tx.id)
+  const payWithEnvelope = usePayWithEnvelope()
+  const envelopes = useEnvelopes()
+  const [envelopeId, setEnvelopeId] = useState('')
   const [categoryId, setCategoryId] = useState(tx.category_id ?? '')
+  // An envelope can pay an expense in its own currency, once the movement belongs to an account.
+  const payable =
+    tx.type === 'expense' && tx.account_id !== null
+      ? (envelopes.data?.envelopes ?? []).filter((e) => e.currency === tx.currency)
+      : []
+  const chosen = payable.find((e) => e.id === envelopeId)
   const takesCategory = tx.type === 'expense' || tx.type === 'income'
   const options = takesCategory ? categoryOptions([...categories.values()], tx.type as CategoryType) : []
   const needsClass = tx.type === 'transfer' && tx.target_account_id === null && tx.classification === null
@@ -237,6 +250,14 @@ function PendingCard({
       } catch {
         return
       }
+    }
+    if (chosen) {
+      // Paying with the envelope also confirms the expense and frees that money from the envelope.
+      payWithEnvelope.mutate(
+        { id: chosen.id, body: { transaction_id: tx.id } },
+        { onSuccess: () => toast.show('Pagado con la cajita') },
+      )
+      return
     }
     onConfirm(tx.id)
   }
@@ -261,17 +282,41 @@ function PendingCard({
           </SelectField>
         </div>
       ) : null}
-      {update.error ? (
+      {payable.length > 0 ? (
+        <div className="mt-2 px-1">
+          <SelectField
+            label="¿Lo pagas con una cajita?"
+            value={envelopeId}
+            onChange={(e) => setEnvelopeId(e.target.value)}
+          >
+            <option value="">No, solo confirmar</option>
+            {payable.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.name} · {formatMoney(e.balance, e.currency)}
+              </option>
+            ))}
+          </SelectField>
+          {chosen ? (
+            <p className="mt-1 text-xs text-slate-400">
+              Confirma el gasto y libera esa plata de la cajita. Sin elegir cajita, «Confirmar» funciona como siempre.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      {update.error || payWithEnvelope.error ? (
         <p role="alert" className="mt-2 px-1 text-sm text-red-400">
-          {errorMessage(update.error)}
+          {errorMessage(update.error ?? payWithEnvelope.error)}
         </p>
       ) : null}
       <div className="mt-2 grid grid-cols-2 gap-2 px-1 pb-1">
         <Button variant="secondary" disabled={busy} onClick={() => onDiscard(tx.id)}>
           Descartar
         </Button>
-        <Button disabled={busy || tx.account_id === null || needsClass} onClick={() => void confirm()}>
-          Confirmar
+        <Button
+          disabled={busy || update.isPending || payWithEnvelope.isPending || tx.account_id === null || needsClass}
+          onClick={() => void confirm()}
+        >
+          {chosen ? 'Confirmar y pagar con cajita' : 'Confirmar'}
         </Button>
       </div>
     </Card>

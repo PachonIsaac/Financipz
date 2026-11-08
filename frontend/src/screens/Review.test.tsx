@@ -30,6 +30,40 @@ describe('review inbox', () => {
     await waitFor(() => expect(discardTransaction).toHaveBeenCalledWith('p1'))
   })
 
+  it('pays a pending expense with an envelope instead of only confirming it', async () => {
+    const user = userEvent.setup()
+    const payWithEnvelope = vi.fn(async () => ({ envelope: {}, transaction_id: 'p3', freed: '1000.00' }))
+    const confirmTransaction = vi.fn(async () => transaction({ id: 'p3' }))
+    const api = fakeApi({
+      listTransactions: vi.fn(async () => ({
+        items: [transaction({ id: 'p3', merchant: 'Seguro', status: 'pending_review', source: 'gmail' })],
+        next_cursor: null,
+      })) as never,
+      listAccounts: vi.fn(async () => [account({ id: 'acc-1' })]),
+      listCategories: vi.fn(async () => []),
+      listEnvelopes: vi.fn(async () => ({
+        envelopes: [
+          {
+            id: 'e1', account_id: 'a9', account_name: 'Billetera', currency: 'COP', name: 'SOAT',
+            target_amount: null, due_date: null, repeats_yearly: false, balance: '300000.00',
+            months_left: null, suggested_monthly: null, ready: false, shortfall: '0.00',
+          },
+        ],
+        reserved_total: '300000.00',
+        suggested_total: '0.00',
+      })) as never,
+      payWithEnvelope: payWithEnvelope as never,
+      confirmTransaction,
+    })
+    renderWithApp(<ReviewScreen />, { api })
+
+    await user.selectOptions(await screen.findByLabelText('¿Lo pagas con una cajita?'), 'e1')
+    await user.click(screen.getByRole('button', { name: 'Confirmar y pagar con cajita' }))
+
+    await waitFor(() => expect(payWithEnvelope).toHaveBeenCalledWith('e1', { transaction_id: 'p3' }))
+    expect(confirmTransaction).not.toHaveBeenCalled()
+  })
+
   it('shows an empty state', async () => {
     const api = fakeApi({
       listTransactions: vi.fn(async () => ({ items: [], next_cursor: null })),

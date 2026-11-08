@@ -422,6 +422,11 @@ export function AccountsScreen() {
                       {account.archived ? <Badge>Archivada</Badge> : null}
                       {account.include_in_balance ? null : <Badge>Fuera del balance</Badge>}
                     </span>
+                    {toCents(account.reserved) > 0n ? (
+                      <span className="block text-[13px] text-orange-400">
+                        de los cuales <Amount value={account.reserved} currency={account.currency} tone="neutral" /> apartados
+                      </span>
+                    ) : null}
                   </span>
                   <Amount
                     value={shownBalance(account, wealth.data?.crypto)}

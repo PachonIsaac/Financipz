@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, PiggyBank, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { ApiError } from '../api/client'
-import { useAccounts, useRefreshData, useSummary, useTransactionList, useWealth } from '../api/hooks'
+import { useAccounts, useEnvelopes, useRefreshData, useSummary, useTransactionList, useWealth } from '../api/hooks'
 import type { RefreshResult, RefreshStep } from '../api/types'
 import { Amount } from '../components/Amount'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -204,6 +204,32 @@ function CryptoCard() {
   )
 }
 
+/** What is set apart in envelopes. It sits under the balance and is not part of the real money. */
+function EnvelopesCard() {
+  const envelopes = useEnvelopes()
+  const data = envelopes.data
+  if (!data || data.envelopes.length === 0) return null
+  return (
+    <Link
+      to="/more/envelopes"
+      aria-label="Cajitas"
+      className="flex min-h-[72px] items-center gap-3 rounded-3xl border border-slate-800 bg-slate-900 px-4 active:bg-slate-800"
+    >
+      <IconChip icon={PiggyBank} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] text-slate-400">Apartado en cajitas</p>
+        <p className="text-lg font-semibold">
+          <Amount value={data.reserved_total} currency="COP" tone="neutral" />
+        </p>
+      </div>
+      <span className="text-[13px] font-semibold text-orange-400">
+        {data.envelopes.length} {data.envelopes.length === 1 ? 'cajita' : 'cajitas'}
+      </span>
+      <ChevronRight aria-hidden="true" size={20} className="text-slate-500" />
+    </Link>
+  )
+}
+
 function RateLine({ rate }: { rate: { value: string; date: string } | null | undefined }) {
   if (!rate) return null
   return (
@@ -251,6 +277,9 @@ export function HomeScreen() {
         <ErrorBoundary label="No se pudo mostrar el resumen del mes.">
           <MonthSummaryCard />
         </ErrorBoundary>
+        <ErrorBoundary quiet>
+          <EnvelopesCard />
+        </ErrorBoundary>
 
         <Card className="pb-2">
           <div className="mb-1 flex items-center justify-between">
@@ -289,11 +318,23 @@ export function HomeScreen() {
                       )}
                     </p>
                   </div>
-                  <Amount
-                    value={shownBalance(account, wealth.data?.crypto)}
-                    currency={account.currency}
-                    className={`text-base font-semibold ${account.include_in_balance ? '' : 'text-slate-400'}`}
-                  />
+                  <div className="text-right">
+                    <Amount
+                      value={shownBalance(account, wealth.data?.crypto)}
+                      currency={account.currency}
+                      className={`text-base font-semibold ${account.include_in_balance ? '' : 'text-slate-400'}`}
+                    />
+                    {toCents(account.reserved) > 0n ? (
+                      <p className="text-xs text-slate-400">
+                        Disponible{' '}
+                        <Amount
+                          value={fromCents(toCents(account.balance) - toCents(account.reserved))}
+                          currency={account.currency}
+                          tone="neutral"
+                        />
+                      </p>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>
