@@ -8,3 +8,8 @@ export function shownBalance(account: Pick<Account, 'type' | 'balance'>, crypto:
   if (account.type === 'exchange' && crypto?.value_usd) return crypto.value_usd
   return account.balance
 }
+
+/** Accounts that can earn interest: the ones that hold money. On a card a higher balance is just less debt. */
+export function canEarnInterest(account: Pick<Account, 'type'> | undefined): boolean {
+  return account !== undefined && ['cash', 'bank', 'savings', 'wallet'].includes(account.type)
+}

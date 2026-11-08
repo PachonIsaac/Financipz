@@ -6,7 +6,7 @@ import { ApiError, createApiClient } from './api/client'
 import { createEndpoints } from './api/endpoints'
 import { useWarmup } from './api/useWarmup'
 import { useAuth } from './auth/AuthProvider'
-import { RouteErrorBoundary } from './components/ErrorBoundary'
+import { ErrorBoundary, RouteErrorBoundary } from './components/ErrorBoundary'
 import { AppLayout } from './components/Layout'
 import { WarmupBanner } from './components/states'
 import { ToastProvider } from './components/Toast'
@@ -29,11 +29,16 @@ const ReviewScreen = lazy(() => import('./screens/Review').then((m) => ({ defaul
 /** Downloads the screens in the background once the person is in, so the first visit to each one does not wait. */
 export function preloadScreens(): void {
   const load = () => {
-    void import('./screens/Movements')
-    void import('./screens/Review')
-    void import('./screens/More')
-    void import('./screens/Accounts')
-    void import('./screens/Crypto')
+    // A failed download is not an error to show: the screen is downloaded again when it is opened.
+    for (const screen of [
+      () => import('./screens/Movements'),
+      () => import('./screens/Review'),
+      () => import('./screens/More'),
+      () => import('./screens/Accounts'),
+      () => import('./screens/Crypto'),
+    ]) {
+      screen().catch(() => undefined)
+    }
   }
   if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(load)
   else window.setTimeout(load, 1500)
@@ -65,7 +70,13 @@ export function AppRoutes() {
         }
       />
       {/* The layout owns the error boundary and the loading state of its screens (see AppLayout). */}
-      <Route element={<AppLayout />}>
+      <Route
+        element={
+          <ErrorBoundary label="No se pudo mostrar la aplicación. Recarga la página.">
+            <AppLayout />
+          </ErrorBoundary>
+        }
+      >
         <Route index element={<HomeScreen />} />
         <Route path="movements" element={<MovementsScreen />} />
         <Route path="movements/:id" element={<MovementDetailScreen />} />

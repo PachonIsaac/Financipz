@@ -113,7 +113,7 @@ function DayDetail({ day, today }: { day: HistoryPoint; today: HistoryPoint }) {
           {comparison.percent ? (
             <>
               {' '}
-              (<Change value={comparison.totalChange} text={`${unsigned(comparison.percent).replace('.', ',')} %`} />)
+              (<Change value={comparison.percent} text={`${unsigned(comparison.percent).replace('.', ',')} %`} />)
             </>
           ) : null}
         </p>
@@ -166,8 +166,10 @@ export function CryptoScreen() {
   const days = history.data ?? []
   const points = days.map((point) => ({ day: point.date, value: point.total_usd }))
   // Until a day is touched, the last one is shown.
-  const [picked, setPicked] = useState<number | null>(null)
-  const selected = Math.min(picked ?? days.length - 1, days.length - 1)
+  // It is remembered by date, so a new sync or another day's window does not move it to another day.
+  const [pickedDate, setPickedDate] = useState<string | null>(null)
+  const found = days.findIndex((day) => day.date === pickedDate)
+  const selected = found >= 0 ? found : days.length - 1
 
   return (
     <>
@@ -230,7 +232,7 @@ export function CryptoScreen() {
                     points={points}
                     description="Valor del portafolio en dólares por día"
                     selected={selected}
-                    onSelect={setPicked}
+                    onSelect={(index) => setPickedDate(days[index]?.date ?? null)}
                   />
                 </div>
                 {days[selected] && days[days.length - 1] ? <DayDetail day={days[selected]} today={days[days.length - 1]!} /> : null}

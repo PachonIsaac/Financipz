@@ -102,6 +102,9 @@ describe('positive balance adjustments', () => {
     const { markInterest } = setupAdjustment('adjustment_in')
 
     await user.click(await screen.findByRole('button', { name: 'Marcar como intereses' }))
+    // It is asked first, because it changes the month's income.
+    expect(markInterest).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Marcar' }))
 
     await waitFor(() => expect(markInterest).toHaveBeenCalledWith('adj'))
   })
@@ -110,6 +113,18 @@ describe('positive balance adjustments', () => {
     setupAdjustment('adjustment_out')
 
     await screen.findByText('Conté')
+    expect(screen.queryByRole('button', { name: 'Marcar como intereses' })).not.toBeInTheDocument()
+  })
+
+  it('is not offered on a card, where a higher balance is just less debt', async () => {
+    const api = fakeApi({
+      getTransaction: vi.fn(async () => transaction({ id: 'adj', type: 'adjustment_in', amount: '500.00', note: 'Extracto', account_id: 'card' })),
+      listAccounts: vi.fn(async () => [account({ id: 'card', name: 'Tarjeta', type: 'credit_card' })]),
+      listCategories: vi.fn(async () => []),
+    })
+    renderWithApp(<MovementDetailScreen />, { api, route: '/movements/adj', path: '/movements/:id' })
+
+    await screen.findByText('Extracto')
     expect(screen.queryByRole('button', { name: 'Marcar como intereses' })).not.toBeInTheDocument()
   })
 })

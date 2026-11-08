@@ -48,4 +48,11 @@ describe('compareDays', () => {
 
     expect(compareDays(then, now).assets[0]).toMatchObject({ status: 'unpriced', quantityChange: '1.000000000000', valueChange: null })
   })
+
+  it('writes a fall too small to show as zero tenths, not as a fall', () => {
+    const result = compareDays(day('a', '1000.00', []), day('b', '999.97', []))
+
+    expect(result.totalChange).toBe('-0.03')
+    expect(result.percent).toBe('0.0')
+  })
 })

@@ -6,6 +6,7 @@ same notification arriving twice is recognized by its hash and stored once. What
 say (which account, what a transfer to a stranger was) is left empty for the person to fill in, never guessed.
 """
 
+import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, time
@@ -20,7 +21,7 @@ from app.db import models
 from app.domain.entities import LOCAL_TIMEZONE, AccountType, Classification, Currency, TransactionStatus, TransactionType
 from app.parsers.dedupe import dedupe_hash_for
 from app.parsers.models import NotificationKind, NotificationSource, ParsedNotification
-from app.services.transactions import default_classification
+from app.services.transactions import default_classification, find_returns_category
 
 
 class Outcome(StrEnum):
@@ -70,6 +71,9 @@ def ingest(db: Session, parsed: ParsedNotification | None) -> IngestResult:
     ambiguous = parsed.occurred_at is None
     reference = _reference(parsed)
     if reference is not None:
+        # Two different operations can look alike (the same amount to the same person in the same minute): the
+        # id tells them apart, so it becomes part of what identifies the movement.
+        digest = hashlib.sha256(f"{digest}|{reference}".encode()).hexdigest()
         # The issuer's own id for the operation is the surest way to know it was already stored.
         known = db.scalars(select(models.Transaction).where(models.Transaction.external_reference == reference).limit(1)).first()
         if known is not None:
@@ -135,10 +139,12 @@ def _build(db: Session, parsed: ParsedNotification, digest: str, moment: datetim
         target = _only_account(db, _CASH, currency)
         transaction_type = TransactionType.TRANSFER
     elif kind is NotificationKind.TRANSFER_OUT:
-        account = _by_digits(db, parsed.last_digits, currency)
-        if account is None and parsed.issuer == "uala":
-            # The end of the wallet's account number may not be registered: it came out of the only wallet, if there is one.
-            account = _only_account(db, _WALLET, currency)
+        if parsed.issuer == "uala":
+            # Only a wallet can be the origin of a wallet notice; if its digits are not registered, it came out of
+            # the only wallet, when there is one.
+            account = _by_digits(db, parsed.last_digits, currency, _WALLET) or _only_account(db, _WALLET, currency)
+        else:
+            account = _by_digits(db, parsed.last_digits, currency)
         # A wallet transfer may go to a phone number, whose last digits mean nothing about the person's accounts.
         destination = parsed.target_key if parsed.issuer == "uala" else (parsed.target_key or parsed.target_text)
         target = _own_destination(db, destination, currency)
@@ -186,11 +192,16 @@ def _build(db: Session, parsed: ParsedNotification, digest: str, moment: datetim
     )
 
 
-def _by_digits(db: Session, digits: str | None, currency: Currency) -> models.Account | None:
-    """The account that carries these last digits in this currency, if exactly one does."""
+def _by_digits(
+    db: Session, digits: str | None, currency: Currency, types: tuple[AccountType, ...] | None = None
+) -> models.Account | None:
+    """The account that carries these last digits in this currency, if exactly one does.
+
+    With `types`, only accounts of those types: the digits of a wallet say nothing about a bank account.
+    """
     if not digits:
         return None
-    rows = db.scalars(
+    query = (
         select(models.Account)
         .join(models.AccountIdentifier, models.AccountIdentifier.account_id == models.Account.id)
         .where(
@@ -199,7 +210,10 @@ def _by_digits(db: Session, digits: str | None, currency: Currency) -> models.Ac
             models.Account.archived.is_(False),
         )
         .distinct()
-    ).all()
+    )
+    if types is not None:
+        query = query.where(models.Account.type.in_([item.value for item in types]))
+    rows = db.scalars(query).all()
     return rows[0] if len(rows) == 1 else None
 
 
@@ -235,6 +249,9 @@ def _own_destination(db: Session, text: str | None, currency: Currency) -> model
 
 
 def _category(db: Session, kind: NotificationKind) -> uuid.UUID | None:
+    if kind is NotificationKind.YIELD:
+        found = find_returns_category(db)
+        return found.id if found else None
     name = _CATEGORY_NAMES.get(kind)
     if name is None:
         return None

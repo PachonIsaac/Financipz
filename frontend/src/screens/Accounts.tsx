@@ -14,7 +14,7 @@ import { PageHeader } from '../components/Layout'
 import { EmptyState, ErrorState, FormError, ListSkeleton } from '../components/states'
 import { useToast } from '../components/Toast'
 import { Badge, Button, Card, SelectField, Switch, TextField } from '../components/ui'
-import { shownBalance } from '../features/accounts/display'
+import { canEarnInterest, shownBalance } from '../features/accounts/display'
 import { accountIcon, IconChip, TONES } from '../features/appearance'
 import {
   accountToValues,
@@ -244,7 +244,7 @@ function AdjustForm({ account, onDone }: { account: Account; onDone: () => void 
   // What the typed balance changes, worked out as the person types, so nothing has to be subtracted by hand.
   const observed = parseAmountInput(balance, { allowNegative: true })
   const difference = observed === null ? null : toCents(observed) - toCents(account.balance)
-  const positive = difference !== null && difference > 0n
+  const positive = difference !== null && difference > 0n && canEarnInterest(account)
   const interest = asInterest && positive
 
   function handleSubmit(event: FormEvent) {

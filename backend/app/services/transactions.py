@@ -235,6 +235,7 @@ def create_adjustment(db: Session, account_id: uuid.UUID, data: AdjustmentCreate
         return AdjustmentResult(transaction=None, balance=balance)
 
     if data.as_interest:
+        _check_interest_account(account)
         if plan.type is not TransactionType.ADJUSTMENT_IN:
             raise ApiError(
                 422,
@@ -274,18 +275,41 @@ def create_adjustment(db: Session, account_id: uuid.UUID, data: AdjustmentCreate
     return AdjustmentResult(transaction=TransactionOut.model_validate(row), balance=round_money(data.observed_balance))
 
 
+# Interest is earned by money that is held. On a card a higher balance is less debt, and on the others it is not earned.
+INTEREST_ACCOUNT_TYPES = frozenset({AccountType.CASH, AccountType.BANK, AccountType.SAVINGS, AccountType.WALLET})
+
+
+def _check_interest_account(account: models.Account) -> None:
+    if AccountType(account.type) not in INTEREST_ACCOUNT_TYPES:
+        raise ApiError(
+            422, "interest_not_for_account", "Los intereses solo se registran en cuentas de efectivo, banco, ahorros o billetera."
+        )
+
+
 INTEREST_NOTE = "Intereses"
 INTEREST_MERCHANT = "Intereses"
 INTEREST_CATEGORY = "Rendimientos"
 
 
-def _interest_category(db: Session) -> uuid.UUID:
-    """The income category interest goes to: the existing one for returns, created if it is missing."""
-    found = db.scalars(
-        select(models.Category).where(
-            models.Category.type == "income", func.lower(models.Category.name) == INTEREST_CATEGORY.lower()
+def find_returns_category(db: Session) -> models.Category | None:
+    """The income category for returns: the one named exactly so, else the first whose name has the word.
+
+    Always the same one for the same data, so interest and the daily yield end up together.
+    """
+    rows = list(
+        db.scalars(
+            select(models.Category)
+            .where(models.Category.type == "income", func.lower(models.Category.name).contains("rendimiento"))
+            .order_by(models.Category.name, models.Category.id)
         )
-    ).first()
+    )
+    exact = [row for row in rows if row.name.lower() == INTEREST_CATEGORY.lower()]
+    return (exact or rows or [None])[0]
+
+
+def _interest_category(db: Session) -> uuid.UUID:
+    """The income category interest goes to: the one for returns, created if there is none."""
+    found = find_returns_category(db)
     if found is not None:
         return found.id
     created = models.Category(id=uuid.uuid4(), name=INTEREST_CATEGORY, type="income")
@@ -301,6 +325,10 @@ def mark_as_interest(db: Session, transaction_id: uuid.UUID) -> models.Transacti
         raise ApiError(
             409, "not_a_positive_adjustment", "Solo un ajuste de saldo positivo se puede marcar como intereses."
         )
+    account = get_account(db, row.account_id)
+    if account.archived:
+        raise ApiError(409, "account_archived", "La cuenta está archivada.")
+    _check_interest_account(account)
     row.type = TransactionType.INCOME.value
     row.category_id = _interest_category(db)
     row.merchant = row.merchant or INTEREST_MERCHANT

@@ -345,13 +345,40 @@ def test_the_last_digits_of_a_phone_number_never_make_a_transfer_go_to_one_of_my
     assert row.target_account_id is None and row.classification is None
 
 
-def test_the_same_operation_twice_is_stored_once_even_if_its_text_changed(client, db):
+def test_the_same_operation_twice_is_stored_once_but_a_different_operation_that_looks_alike_is_not_lost(client, db):
     create_account(client, name="Wallet", type="wallet")
     first = ingest.ingest(db, parse_uala_email(uala_transfer()))
     # The same operation id, with the amount written differently: only the id says it is the same.
     second = ingest.ingest(db, parse_uala_email(uala_transfer(amount="$20.000,00 ")))
+    # Another operation with the same amount, person and minute: a real second transfer.
     third = ingest.ingest(db, parse_uala_email(uala_transfer(operation="20261104ZZZ999999999")))
+    fourth = ingest.ingest(db, parse_uala_email(uala_transfer(operation="20261104ZZZ999999999")))
 
-    assert (first.outcome, second.outcome, third.outcome) == (Outcome.CREATED, Outcome.DUPLICATE, Outcome.DUPLICATE)
-    assert second.transaction.id == first.transaction.id
-    assert len(rows(db)) == 1
+    assert (first.outcome, second.outcome, third.outcome, fourth.outcome) == (
+        Outcome.CREATED, Outcome.DUPLICATE, Outcome.CREATED, Outcome.DUPLICATE,
+    )
+    assert second.transaction.id == first.transaction.id and fourth.transaction.id == third.transaction.id
+    assert len(rows(db)) == 2
+
+
+def test_the_digits_of_a_wallet_notice_never_book_it_to_a_bank_account(client, db):
+    wallet = create_account(client, name="Wallet", type="wallet")
+    with_digits(client, create_account(client, name="Savings", type="savings"), "6920", "account")
+
+    row = ingest.ingest(db, parse_uala_email(uala_transfer())).transaction
+
+    assert str(row.account_id) == wallet["id"]
+
+
+def test_yield_and_interest_share_a_category_even_when_the_name_is_not_exactly_the_same(client, db):
+    create_account(client, name="Wallet", type="wallet", initial=100)
+    category = client.post(f"{API}/categories", json={"name": "Rendimientos Ualá", "type": "income"}).json()
+
+    interest = client.post(
+        f"{API}/accounts/{client.get(f'{API}/accounts').json()[0]['id']}/adjustments",
+        json={"observed_balance": "150", "as_interest": True},
+    ).json()["transaction"]
+    yielded = ingest.ingest(db, parse_uala_sms(UALA_YIELD, RECEIVED)).transaction
+
+    assert interest["category_id"] == category["id"] == str(yielded.category_id)
+    assert len(client.get(f"{API}/categories", params={"type": "income"}).json()) == 1

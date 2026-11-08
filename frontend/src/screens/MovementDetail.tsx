@@ -19,6 +19,7 @@ import { useToast } from '../components/Toast'
 import { Badge, Button, Card } from '../components/ui'
 import { categoryLook, IconChip } from '../features/appearance'
 import { SOURCE_LABELS, STATUS_LABELS, TRANSACTION_TYPE_LABELS } from '../features/labels'
+import { canEarnInterest } from '../features/accounts/display'
 import { directionOf, signedAmount } from '../features/transactions/display'
 import { buildUpdate, type TransactionFormValues } from '../features/transactions/form'
 import { TransactionForm } from '../features/transactions/TransactionForm'
@@ -61,6 +62,7 @@ export function MovementDetailScreen() {
   const discard = useDiscardTransaction()
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [confirmingInterest, setConfirmingInterest] = useState(false)
 
   const back = { to: '/movements', label: 'Volver a movimientos' }
   const tx = query.data
@@ -182,7 +184,32 @@ export function MovementDetailScreen() {
 
         <FormError error={remove.error ?? confirm.error ?? discard.error} />
 
-        {confirmingDelete ? (
+        {confirmingInterest ? (
+          <div role="alertdialog" aria-labelledby="interest-title" className="flex flex-col gap-3 rounded-2xl border border-amber-400/40 p-4">
+            <p id="interest-title" className="font-medium">
+              ¿Marcar este ajuste como intereses? Pasa a ser un ingreso del mes con la categoría Rendimientos. El saldo no cambia.
+            </p>
+            <FormError error={markInterest.error} />
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="secondary" onClick={() => setConfirmingInterest(false)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={markInterest.isPending}
+                onClick={() =>
+                  markInterest.mutate(tx.id, {
+                    onSuccess: () => {
+                      setConfirmingInterest(false)
+                      toast.show('Marcado como intereses')
+                    },
+                  })
+                }
+              >
+                {markInterest.isPending ? 'Guardando…' : 'Marcar'}
+              </Button>
+            </div>
+          </div>
+        ) : confirmingDelete ? (
           <div
             role="alertdialog"
             aria-labelledby="delete-title"
@@ -228,13 +255,9 @@ export function MovementDetailScreen() {
               <Button variant="secondary" onClick={() => setEditing(true)}>
                 Editar
               </Button>
-            ) : tx.type === 'adjustment_in' && tx.status === 'confirmed' ? (
-              <Button
-                variant="secondary"
-                disabled={markInterest.isPending}
-                onClick={() => markInterest.mutate(tx.id, { onSuccess: () => toast.show('Marcado como intereses') })}
-              >
-                {markInterest.isPending ? 'Guardando…' : 'Marcar como intereses'}
+            ) : tx.type === 'adjustment_in' && tx.status === 'confirmed' && canEarnInterest(account) ? (
+              <Button variant="secondary" onClick={() => setConfirmingInterest(true)}>
+                Marcar como intereses
               </Button>
             ) : (
               <span />

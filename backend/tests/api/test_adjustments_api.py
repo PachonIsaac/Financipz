@@ -161,3 +161,36 @@ def test_only_a_positive_confirmed_adjustment_can_be_marked_as_interest(client):
         response = client.post(f"{API}/transactions/{target}/mark-interest")
         assert response.status_code == 409 and error_code(response) == "not_a_positive_adjustment"
     assert client.post(f"{API}/transactions/{uuid.uuid4()}/mark-interest").status_code == 404
+
+
+def test_interest_is_only_for_accounts_that_hold_money(client):
+    card = create_account(client, name="Card", type="credit_card", initial=-1000)
+    loan = create_account(client, name="Loan", type="loan", counterparty="Ana", initial=500)
+
+    for account, observed in ((card, -500), (loan, 800)):
+        response = interest(client, account, observed)
+        assert response.status_code == 422 and error_code(response) == "interest_not_for_account"
+    assert balance_of(client, card) == D("-1000")
+
+
+def test_a_positive_adjustment_on_a_card_or_an_archived_account_cannot_be_marked_as_interest(client):
+    card = create_account(client, name="Card", type="credit_card", initial=-1000)
+    on_card = adjust(client, card, -500, note="Statement").json()["transaction"]
+    wallet = create_account(client, name="Wallet", type="wallet", initial=100)
+    on_wallet = adjust(client, wallet, 200, note="Counted").json()["transaction"]
+    client.patch(f"{API}/accounts/{wallet['id']}", json={"archived": True})
+
+    assert error_code(client.post(f"{API}/transactions/{on_card['id']}/mark-interest")) == "interest_not_for_account"
+    archived = client.post(f"{API}/transactions/{on_wallet['id']}/mark-interest")
+    assert archived.status_code == 409 and error_code(archived) == "account_archived"
+
+
+def test_interest_goes_to_the_same_category_every_time_when_there_are_several_with_that_word(client):
+    wallet = create_account(client, name="Wallet", type="wallet", initial=100)
+    client.post(f"{API}/categories", json={"name": "Rendimientos Ualá", "type": "income"})
+    exact = client.post(f"{API}/categories", json={"name": "Rendimientos", "type": "income"}).json()
+
+    first = interest(client, wallet, 110).json()["transaction"]
+    second = interest(client, wallet, 125).json()["transaction"]
+
+    assert first["category_id"] == second["category_id"] == exact["id"]

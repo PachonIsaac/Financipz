@@ -122,4 +122,20 @@ describe('adjusting the balance of an account', () => {
     await user.click(screen.getByRole('button', { name: 'Ajustar saldo' }))
     await waitFor(() => expect(adjustAccount).toHaveBeenCalledWith('a1', { observed_balance: '100350.00', note: 'Conté el efectivo' }))
   })
+
+  it('does not offer interest on a credit card', async () => {
+    const user = userEvent.setup()
+    const api = fakeApi({
+      listAccounts: vi.fn(async () => [account({ id: 'c1', name: 'Tarjeta', type: 'credit_card', balance: '-100000.00' })]),
+      listIdentifiers: vi.fn(async () => []),
+    })
+    renderWithApp(<AccountsScreen />, { api })
+    await user.click(await screen.findByText('Tarjeta'))
+    await user.click(screen.getByRole('button', { name: 'Ajustar saldo' }))
+
+    await user.type(screen.getByLabelText(/Saldo real/), '-50000')
+
+    expect(screen.getByText(/Diferencia:/)).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: 'Registrar como intereses' })).not.toBeInTheDocument()
+  })
 })
